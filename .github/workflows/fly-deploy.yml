@@ -37,7 +37,7 @@ jobs:
         run: pytest tests/ -v
 
   deploy:
-    name: Deploy Legato.Pit
+    name: Deploy Legate Studio
     runs-on: ubuntu-latest
     needs: test
     concurrency: deploy-group
@@ -57,7 +57,7 @@ jobs:
           echo "Waiting for deployment to stabilize..."
           sleep 15
 
-          APP_URL="https://legato-pit.fly.dev"
+          APP_URL="https://legate.studio"
           MAX_ATTEMPTS=5
           ATTEMPT=1
 
@@ -73,4 +73,4 @@ jobs:
           done
 
           echo "Warning: Health check did not pass after $MAX_ATTEMPTS attempts"
-          echo "Check logs with: fly logs --app legato-pit"
+          echo "Check logs with: fly logs --app legate-studio"

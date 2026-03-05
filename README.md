@@ -1,10 +1,10 @@
-# Legato.Pit
+# Legate Studio
 
-Dashboard and Transcript Dropbox for the LEGATO system.
+Dashboard and Transcript Dropbox for the Legate Studio system.
 
 ## Features
 
-- **Dashboard**: Real-time view of LEGATO system status, recent transcript jobs, and knowledge artifacts
+- **Dashboard**: Real-time view of Legate Studio system status, recent transcript jobs, and knowledge artifacts
 - **Transcript Dropbox**: Secure upload endpoint for transcripts (mobile-friendly)
 - **GitHub OAuth**: Secure authentication with user allowlist
 - **Fly.io Deployment**: Automated deployment with GitHub Actions
@@ -16,9 +16,9 @@ Dashboard and Transcript Dropbox for the LEGATO system.
 1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
 2. Click "New OAuth App"
 3. Fill in:
-   - Application name: `Legato.Pit`
-   - Homepage URL: `https://legato-pit.fly.dev`
-   - Authorization callback URL: `https://legato-pit.fly.dev/auth/github/callback`
+   - Application name: `Legate Studio`
+   - Homepage URL: `https://legate.studio`
+   - Authorization callback URL: `https://legate.studio/auth/github/callback`
 4. Note the Client ID and generate a Client Secret
 
 ### 2. Configure Environment

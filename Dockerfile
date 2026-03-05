@@ -1,4 +1,4 @@
-# Legato.Pit - Dashboard & Transcript Dropbox
+# Legate Studio - Dashboard & Transcript Dropbox
 FROM python:3.11-slim
 
 # Install dependencies

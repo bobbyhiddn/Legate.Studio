@@ -1,10 +1,10 @@
 # MCP Connector Setup for Claude.ai
 
-This guide explains how to connect Legato.Pit to Claude.ai as a custom MCP connector.
+This guide explains how to connect Legate Studio to Claude.ai as a custom MCP connector.
 
 ## Prerequisites
 
-1. **Pit must be deployed** with HTTPS (e.g., `https://legato-pit.fly.dev`)
+1. **Pit must be deployed** with HTTPS (e.g., `https://legate.studio`)
 2. **GitHub OAuth configured** with `GH_OAUTH_CLIENT_ID` and `GH_OAUTH_CLIENT_SECRET`
 3. **PyJWT installed**: `pip install PyJWT>=2.8.0`
 
@@ -30,7 +30,7 @@ Go to **Settings** → **Connectors**
 Click **"Add custom connector"** and enter:
 
 ```
-Server URL: https://legato-pit.fly.dev/mcp
+Server URL: https://legate.studio/mcp
 ```
 
 ### 3. Authenticate
@@ -43,7 +43,7 @@ Claude will:
 
 ### 4. Verify Connection
 
-Once connected, you should see "legato-pit" in your connectors list with a green status.
+Once connected, you should see "legate-studio" in your connectors list with a green status.
 
 ## Available Tools
 
@@ -62,21 +62,21 @@ Once connected, Claude can use these tools:
 ### Test 1: List Categories
 
 Ask Claude:
-> "What categories are available in my Legato library?"
+> "What categories are available in my Legate Studio library?"
 
 Expected: Claude calls `list_categories` and returns your category list with counts.
 
 ### Test 2: Search
 
 Ask Claude:
-> "Search my Legato library for notes about projects or implementation ideas"
+> "Search my Legate Studio library for notes about projects or implementation ideas"
 
 Expected: Claude calls `search_library` and returns relevant notes with similarity scores.
 
 ### Test 3: Create Note
 
 Ask Claude:
-> "Create a new concept note in my Legato library titled 'Testing MCP Integration' with the content: 'This note was created via Claude MCP connector to verify the integration works correctly.'"
+> "Create a new concept note in my Legate Studio library titled 'Testing MCP Integration' with the content: 'This note was created via Claude MCP connector to verify the integration works correctly.'"
 
 Expected: Claude calls `create_note`, creates the file in GitHub, and returns the entry_id.
 
@@ -94,7 +94,7 @@ Expected: Claude searches, finds the note, then calls `get_note` to fetch full c
 1. Verify your Pit URL is HTTPS and publicly accessible
 2. Check that `/.well-known/oauth-authorization-server` returns valid JSON:
    ```bash
-   curl https://legato-pit.fly.dev/.well-known/oauth-authorization-server
+   curl https://legate.studio/.well-known/oauth-authorization-server
    ```
 
 ### "Authentication Failed"
@@ -119,19 +119,19 @@ You can test the OAuth flow manually:
 
 ```bash
 # 1. Check OAuth discovery
-curl https://legato-pit.fly.dev/.well-known/oauth-authorization-server
+curl https://legate.studio/.well-known/oauth-authorization-server
 
 # 2. Test DCR (registration)
-curl -X POST https://legato-pit.fly.dev/oauth/register \
+curl -X POST https://legate.studio/oauth/register \
   -H "Content-Type: application/json" \
   -d '{"redirect_uris":["https://example.com/callback"],"client_name":"Test"}'
 
 # 3. Test MCP protocol version
-curl -I https://legato-pit.fly.dev/mcp
+curl -I https://legate.studio/mcp
 # Should return: MCP-Protocol-Version: 2025-06-18
 
 # 4. Test MCP endpoint (requires valid token)
-curl -X POST https://legato-pit.fly.dev/mcp \
+curl -X POST https://legate.studio/mcp \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
