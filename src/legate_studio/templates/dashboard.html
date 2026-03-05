@@ -12,7 +12,7 @@
         flex-direction: column;
     }
 
-    @media (max-width: 480px) {
+    @media (max-width: 768px) {
         .graph-card {
             height: 360px;
         }
@@ -22,6 +22,9 @@
         .graph-legend {
             top: 0.25rem;
             right: 0.25rem;
+            bottom: auto;          /* Don't stretch full height on mobile */
+            max-height: 45%;       /* Cap at 45% of graph height when expanded */
+            width: auto;
             max-width: 140px;
             font-size: 0.65rem;
         }
@@ -1093,8 +1096,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initGraph() {
-    // Auto-collapse legend on mobile to prevent overlap
-    if (window.innerWidth <= 480) {
+    // Auto-collapse legend on mobile/tablet to prevent overlap
+    if (window.innerWidth <= 768) {
         const legend = document.getElementById('graphLegend');
         if (legend) legend.classList.add('collapsed');
     }
@@ -1245,9 +1248,9 @@ function renderGraph() {
         .force('charge', d3.forceManyBody()
             .strength(-100)
             .distanceMax(200))
-        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('center', d3.forceCenter(width * 0.45, height / 2))
         .force('collision', d3.forceCollide().radius(currentNodeSize + 3))
-        .force('x', d3.forceX(width / 2).strength(0.03))
+        .force('x', d3.forceX(width * 0.45).strength(0.03))
         .force('y', d3.forceY(height / 2).strength(0.03));
 
     // Apply layout based on current mode
@@ -1273,7 +1276,7 @@ function renderGraph() {
             graphData.categories.forEach((cat, i) => {
                 const angle = (i / categoryCount) * 2 * Math.PI;
                 categoryPositions[cat.name] = {
-                    x: width / 2 + Math.cos(angle) * 100,
+                    x: width * 0.45 + Math.cos(angle) * 100,
                     y: height / 2 + Math.sin(angle) * 100
                 };
             });
@@ -1696,7 +1699,7 @@ window.addEventListener('resize', () => {
         svg.attr('viewBox', [0, 0, width, height]);
 
         if (simulation) {
-            simulation.force('center', d3.forceCenter(width / 2, height / 2));
+            simulation.force('center', d3.forceCenter(width * 0.45, height / 2));
             simulation.alpha(0.3).restart();
         }
     }
