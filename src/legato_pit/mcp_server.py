@@ -18,6 +18,7 @@ from functools import wraps
 from flask import Blueprint, request, jsonify, g, current_app
 
 from .oauth_server import require_mcp_auth, verify_access_token
+from .core import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +26,6 @@ mcp_bp = Blueprint('mcp', __name__, url_prefix='/mcp')
 
 # Disable strict slashes so /mcp and /mcp/ both work
 mcp_bp.strict_slashes = False
-
-# Note: MCP endpoints are exempted from rate limiting in core.py
-# because they use OAuth authentication (token identifies user)
 
 # MCP Protocol version (as of June 2025 spec)
 MCP_PROTOCOL_VERSION = "2025-06-18"
@@ -78,21 +76,47 @@ def get_embedding_service():
     return g.mcp_embedding_service
 
 
-# ============ Rate Limit Exemption ============
-# MCP endpoints are OAuth-authenticated, so we exempt them from IP-based rate limiting.
-# This prevents Claude from hitting the 50/hour limit during normal usage.
+# ============ Per-User Rate Limiting ============
+# Flask-Limiter evaluates key_func during its before_request hook, which fires
+# before the view function (and before @require_mcp_auth) runs. To ensure
+# g.mcp_user is populated at that point, we pre-populate it here in a
+# before_request handler that runs first.
 
 @mcp_bp.before_request
-def exempt_mcp_from_rate_limit():
-    """Exempt all MCP requests from rate limiting.
+def _pre_populate_mcp_user():
+    """Pre-populate g.mcp_user from the JWT so the rate-limit key_func can use it.
 
-    Flask-Limiter checks for this attribute to skip rate limiting.
-    MCP uses OAuth token authentication, so IP-based rate limiting
-    is unnecessary and causes disconnections during normal operation.
+    Flask-Limiter's before_request fires before the view function runs, so
+    g.mcp_user (set by @require_mcp_auth) wouldn't be available during the
+    key_func call. This handler performs a lightweight JWT decode to make the
+    user_id available for rate-limit keying, without duplicating auth logic —
+    the full @require_mcp_auth decorator still enforces auth and handles errors.
     """
-    from flask import g
-    # This is the flag Flask-Limiter checks to skip rate limiting
-    g._rate_limiting_complete = True
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return  # No token — key_func will fall back to IP; auth will 401 later
+
+    token = auth_header[7:]
+    try:
+        claims = verify_access_token(token)
+        if claims:
+            g.mcp_user = claims
+    except Exception:
+        pass  # Auth errors handled properly by @require_mcp_auth
+
+
+def get_mcp_user_id():
+    """Rate-limit key function: authenticated user ID from JWT.
+
+    Returns a per-user key for authenticated requests so rate limits
+    apply per-user (not per-IP). Falls back to IP for unauthenticated
+    requests — those will be rejected by @require_mcp_auth anyway.
+    """
+    from flask_limiter.util import get_remote_address
+    user = getattr(g, 'mcp_user', None)
+    if user and user.get('user_id'):
+        return f"mcp:{user['user_id']}"
+    return get_remote_address()
 
 
 # ============ Protocol Version Discovery ============
@@ -122,12 +146,19 @@ def mcp_head():
 
 @mcp_bp.route('', methods=['POST'])
 @mcp_bp.route('/', methods=['POST'])
+@limiter.limit("1000 per hour", key_func=get_mcp_user_id)
 @require_mcp_auth
 def mcp_post():
     """Handle MCP JSON-RPC 2.0 requests.
 
     All MCP communication goes through this endpoint.
     Requests are routed to specific handlers based on the method.
+
+    Rate limit: 1000 requests/hour per authenticated user (keyed by user_id).
+    Generous limit designed to catch runaway agents without affecting normal
+    Claude usage (~50-100 calls/hour for a human-driven session).
+    Flask-Limiter fires before_request (rate check) after _pre_populate_mcp_user,
+    which ensures g.mcp_user is set from the JWT before the key_func runs.
     """
     try:
         msg = request.get_json()

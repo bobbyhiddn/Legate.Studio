@@ -27,6 +27,15 @@ logger = logging.getLogger(__name__)
 _last_activity_time = time.time()
 _activity_lock = threading.Lock()
 
+# Module-level rate limiter — initialized via limiter.init_app(app) inside create_app().
+# Defined at module level so blueprints (e.g. mcp_server.py) can import and
+# decorate routes with @limiter.limit() at module load time before the app exists.
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
+
 
 def touch_activity():
     """Update last activity timestamp (called on user interactions)."""
@@ -145,24 +154,10 @@ def create_app():
         APP_DESCRIPTION='Dashboard & Motif for LEGATO'
     )
 
-    # Rate limiting
-    limiter = Limiter(
-        key_func=get_remote_address,
-        app=app,
-        default_limits=["200 per day", "50 per hour"],
-        storage_uri="memory://",
-    )
-
-    # MCP endpoints are exempted because they use OAuth authentication
-    # instead of IP-based limits (the OAuth token identifies the user)
-    @limiter.request_filter
-    def exempt_mcp_endpoints():
-        """Return True to exempt request from rate limiting."""
-        # Exempt MCP endpoints - they use OAuth for auth
-        return request.path.startswith('/mcp')
-
-    # Store limiter on app for use in blueprints
-    app.limiter = limiter
+    # Rate limiting — binds the module-level limiter to this app.
+    # Default limits apply to all non-MCP routes.
+    # MCP endpoints use per-user limits (see mcp_server.py get_mcp_user_id).
+    limiter.init_app(app)
 
     # Register blueprints
     from .auth import auth_bp
