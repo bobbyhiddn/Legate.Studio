@@ -62,11 +62,13 @@
                     <span class="nav-badge" id="agentQueueBadge" style="display:none;"></span>
                 </a>
                 {% endif %}
+                {% if user.has_chat %}
                 <a href="{{ url_for('chat.index') }}"
                    class="sidebar-link {% if request.endpoint and request.endpoint.startswith('chat.') %}active{% endif %}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                     Chat
                 </a>
+                {% endif %}
                 <a href="{{ url_for('motif_api.index') }}"
                    class="sidebar-link {% if request.endpoint and request.endpoint.startswith('motif_api.') %}active{% endif %}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>

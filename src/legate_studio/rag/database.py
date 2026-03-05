@@ -591,6 +591,12 @@ def init_db(db_path: Path | None = None, user_id: str | None = None) -> sqlite3.
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Migration: add has_chat flag to users (for gating Chat feature)
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN has_chat INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     # GitHub App installations (per-user scoped tokens)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS github_app_installations (

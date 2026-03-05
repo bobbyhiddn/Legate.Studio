@@ -212,6 +212,7 @@ def _get_or_create_user(
         "trial_started_at": now,
         "has_copilot": False,
         "is_beta": False,
+        "has_chat": False,
     }
 
 
@@ -681,6 +682,7 @@ def github_app_callback():
             "tier": user.get("tier", "free"),
             "auth_mode": "github_app",
             "has_copilot": bool(user.get("has_copilot", False)),
+            "has_chat": bool(user.get("has_chat", False)),
         }
         session["github_token"] = access_token
         session.permanent = True

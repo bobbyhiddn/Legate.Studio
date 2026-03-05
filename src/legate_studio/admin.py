@@ -134,6 +134,7 @@ def index():
             u.tier,
             u.is_beta,
             u.has_copilot,
+            u.has_chat,
             u.created_at,
             u.updated_at,
             (SELECT COUNT(*) FROM github_app_installations WHERE user_id = u.user_id) as installation_count,
@@ -148,6 +149,7 @@ def index():
     stats = {
         "total_users": len(users),
         "users_with_copilot": sum(1 for u in users if u.get("has_copilot")),
+        "users_with_chat": sum(1 for u in users if u.get("has_chat")),
         "paid_users": sum(1 for u in users if u.get("tier") and u["tier"] != "free"),
     }
 
@@ -376,6 +378,38 @@ def api_set_user_beta(user_id: str):
             "status": "success",
             "user_id": user_id,
             "is_beta": is_beta,
+        }
+    )
+
+
+@admin_bp.route("/api/user/<user_id>/chat", methods=["POST"])
+@admin_required
+def api_set_user_chat(user_id: str):
+    """Toggle a user's Chat access (has_chat flag)."""
+    from .rag.database import init_db
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    has_chat = bool(data.get("has_chat", False))
+
+    db = init_db()
+
+    user = db.execute("SELECT github_login FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    db.execute("UPDATE users SET has_chat = ? WHERE user_id = ?", (has_chat, user_id))
+    db.commit()
+
+    logger.info(f"Admin set has_chat for {user['github_login']} to {has_chat}")
+
+    return jsonify(
+        {
+            "status": "success",
+            "user_id": user_id,
+            "has_chat": has_chat,
         }
     )
 

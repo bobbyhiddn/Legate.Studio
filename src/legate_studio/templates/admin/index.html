@@ -188,6 +188,10 @@
             <div class="value">{{ stats.users_with_copilot }}</div>
         </div>
         <div class="stat-card">
+            <h3>Chat Enabled</h3>
+            <div class="value">{{ stats.users_with_chat }}</div>
+        </div>
+        <div class="stat-card">
             <h3>Paid Users</h3>
             <div class="value">{{ stats.paid_users }}</div>
         </div>
@@ -206,6 +210,7 @@
                 <th>Tier</th>
                 <th>Beta</th>
                 <th>Copilot</th>
+                <th>Chat</th>
                 <th>Repos</th>
                 <th>Updated</th>
                 <th>Actions</th>
@@ -237,6 +242,12 @@
                     <button class="copilot-badge {% if user.has_copilot %}copilot-yes{% else %}copilot-no{% endif %}"
                             onclick="toggleCopilot('{{ user.user_id }}', {{ 'false' if user.has_copilot else 'true' }})">
                         {{ 'Yes' if user.has_copilot else 'No' }}
+                    </button>
+                </td>
+                <td>
+                    <button class="copilot-badge {% if user.has_chat %}copilot-yes{% else %}copilot-no{% endif %}"
+                            onclick="toggleChat('{{ user.user_id }}', {{ 'false' if user.has_chat else 'true' }})">
+                        {{ 'Yes' if user.has_chat else 'No' }}
                     </button>
                 </td>
                 <td>{{ user.repo_count }}</td>
@@ -296,6 +307,25 @@ async function toggleBeta(userId, enable) {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({is_beta: enable})
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            alert('Error: ' + (data.error || 'Unknown error'));
+            return;
+        }
+        // Reload to show updated state
+        location.reload();
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function toggleChat(userId, enable) {
+    try {
+        const resp = await fetch(`/admin/api/user/${userId}/chat`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({has_chat: enable})
         });
         const data = await resp.json();
         if (!resp.ok) {

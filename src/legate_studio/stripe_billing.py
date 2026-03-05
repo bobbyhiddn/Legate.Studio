@@ -3,7 +3,7 @@ Stripe Billing Integration for Legato.Pit
 
 Handles subscriptions, checkout, and webhooks for:
 - BYOK tier ($0.99/month) - Bring your own API keys
-- Managed tier ($10/month) - Platform API keys included
+- Managed tier ($5/month) - Platform API keys included
 """
 
 import logging
@@ -40,7 +40,7 @@ STRIPE_PRODUCTS = {
     "managed": {
         "name": "Legate Studio Managed",
         "description": "Platform API keys included - full features",
-        "price_cents": 1000,
+        "price_cents": 500,
         "interval": "month",
         "tier": "managed",
     },
@@ -84,17 +84,20 @@ def get_or_create_stripe_products() -> dict:
 
     Returns dict mapping tier name to price_id.
     Stores IDs in system_config table.
+
+    Price verification: if a cached price ID exists but its unit_amount no longer
+    matches STRIPE_PRODUCTS (e.g. after a price change), a new Stripe price is
+    created at the correct amount and the cache is updated. Old prices are
+    deactivated on Stripe so they can no longer be used for new subscriptions.
     """
     db = _get_db()
 
-    # Check if we already have product IDs stored
+    # Load any cached price IDs
     config = db.execute("SELECT key, value FROM system_config WHERE key LIKE 'stripe_price_%'").fetchall()
+    cached = {row["key"].replace("stripe_price_", ""): row["value"] for row in config}
 
-    if config and len(config) >= len(STRIPE_PRODUCTS):
-        return {row["key"].replace("stripe_price_", ""): row["value"] for row in config}
-
-    # Create products and prices in Stripe
     price_ids = {}
+    needs_commit = False
 
     for tier_key, product_config in STRIPE_PRODUCTS.items():
         try:
@@ -113,35 +116,63 @@ def get_or_create_stripe_products() -> dict:
                 )
                 logger.info(f"Created Stripe product for {tier_key}: {product.id}")
 
-            # Get or create price
-            prices = stripe.Price.list(product=product.id, active=True)
-            if prices.data:
-                price = prices.data[0]
-            else:
-                price = stripe.Price.create(
-                    product=product.id,
-                    unit_amount=product_config["price_cents"],
-                    currency="usd",
-                    recurring={"interval": product_config["interval"]},
-                )
-                logger.info(f"Created Stripe price for {tier_key}: {price.id}")
+            cached_price_id = cached.get(tier_key)
+            price = None
+
+            if cached_price_id:
+                # Verify cached price still matches the configured amount
+                try:
+                    cached_price = stripe.Price.retrieve(cached_price_id)
+                    if cached_price.get("unit_amount") == product_config["price_cents"]:
+                        price = cached_price
+                    else:
+                        logger.info(
+                            f"Price mismatch for {tier_key}: cached={cached_price.get('unit_amount')}¢ "
+                            f"configured={product_config['price_cents']}¢ — creating new price"
+                        )
+                        # Deactivate the old price so it can't be used for new subscriptions
+                        stripe.Price.modify(cached_price_id, active=False)
+                        logger.info(f"Deactivated old Stripe price {cached_price_id} for {tier_key}")
+                except stripe.error.StripeError as e:
+                    logger.warning(f"Could not retrieve cached price {cached_price_id}: {e}")
+
+            if price is None:
+                # Try to find a matching active price on the product first
+                prices = stripe.Price.list(product=product.id, active=True)
+                matching = [
+                    p for p in prices.data if p.get("unit_amount") == product_config["price_cents"]
+                ]
+                if matching:
+                    price = matching[0]
+                    logger.info(f"Found existing matching Stripe price for {tier_key}: {price.id}")
+                else:
+                    price = stripe.Price.create(
+                        product=product.id,
+                        unit_amount=product_config["price_cents"],
+                        currency="usd",
+                        recurring={"interval": product_config["interval"]},
+                    )
+                    logger.info(f"Created Stripe price for {tier_key}: {price.id}")
 
             price_ids[tier_key] = price.id
 
-            # Store in system_config
-            db.execute(
-                """
-                INSERT OR REPLACE INTO system_config (key, value, updated_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
-            """,
-                (f"stripe_price_{tier_key}", price.id),
-            )
+            # Update cache if the price changed
+            if cached.get(tier_key) != price.id:
+                db.execute(
+                    """
+                    INSERT OR REPLACE INTO system_config (key, value, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                """,
+                    (f"stripe_price_{tier_key}", price.id),
+                )
+                needs_commit = True
 
         except stripe.error.StripeError as e:
             logger.error(f"Stripe error creating product {tier_key}: {e}")
             raise
 
-    db.commit()
+    if needs_commit:
+        db.commit()
     return price_ids
 
 
