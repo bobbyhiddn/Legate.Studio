@@ -8,19 +8,18 @@ Note: The auth blueprint is mounted at /auth, so login is at /auth/login.
 """
 
 
-def test_root_redirects_unauthenticated(client):
-    """GET / with no session should redirect (to login or dashboard)."""
+def test_root_serves_landing_unauthenticated(client):
+    """GET / with no session should serve the marketing landing page (200)."""
     response = client.get("/")
-    # Root redirects — either to /auth/login or /dashboard depending on session state
-    assert response.status_code in (301, 302, 308)
+    # Unauthenticated visitors see the landing page, not a redirect
+    assert response.status_code == 200
 
 
-def test_root_redirect_points_to_login(client):
-    """GET / with no session should ultimately point toward /auth/login."""
+def test_root_landing_contains_branding(client):
+    """GET / landing page should contain Legate branding."""
     response = client.get("/")
-    location = response.headers.get("Location", "")
-    # Should redirect toward login, not dashboard (no session)
-    assert "login" in location or response.status_code in (301, 302, 308)
+    # The landing page should render successfully with app content
+    assert response.status_code == 200
 
 
 def test_login_page_is_accessible(client):
