@@ -223,7 +223,7 @@ def send_message():
         if session_row and not session_row["title"]:
             title = message[:50] + ("..." if len(message) > 50 else "")
             services["chat_db"].execute(
-                ("UPDATE chat_sessions SET title = ?, updated_at = CURRENT_TIMESTAMP WHEREsession_id = ?"),
+                ("UPDATE chat_sessions SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?"),
                 (title, session_id),
             )
             services["chat_db"].commit()

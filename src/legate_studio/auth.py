@@ -649,7 +649,7 @@ def github_app_callback():
             db = _get_db()
             encrypted_refresh = encrypt_for_user(user["user_id"], refresh_token)
             db.execute(
-                ("UPDATE users SET refresh_token_encrypted = ?, updated_at = CURRENT_TIMESTAMPWHERE user_id = ?"),
+                ("UPDATE users SET refresh_token_encrypted = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"),
                 (encrypted_refresh, user["user_id"]),
             )
             db.commit()
@@ -985,7 +985,7 @@ def setup_debug():
                 debug_info[f"repos_for_other_user_{other_id}"] = [dict(r) for r in other_repos]
 
             other_installations = db.execute(
-                ("SELECT installation_id, account_login FROM github_app_installations WHEREuser_id = ?"),
+                ("SELECT installation_id, account_login FROM github_app_installations WHERE user_id = ?"),
                 (other_id,),
             ).fetchall()
             if other_installations:
@@ -993,7 +993,7 @@ def setup_debug():
 
     # Also show all installations in the system matching this username's account
     all_matching_installations = db.execute(
-        ("SELECT installation_id, user_id, account_login FROM github_app_installations WHEREaccount_login = ?"),
+        ("SELECT installation_id, user_id, account_login FROM github_app_installations WHERE account_login = ?"),
         (username,),
     ).fetchall()
     debug_info["all_installations_for_account"] = [dict(i) for i in all_matching_installations]
@@ -1132,7 +1132,7 @@ def setup_repo():
 
         # Verify installation belongs to user
         inst = db.execute(
-            ("SELECT installation_id FROM github_app_installations WHERE installation_id = ?AND user_id = ?"),
+            ("SELECT installation_id FROM github_app_installations WHERE installation_id = ? AND user_id = ?"),
             (installation_id, user_id),
         ).fetchone()
 

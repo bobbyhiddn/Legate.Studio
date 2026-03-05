@@ -539,7 +539,7 @@ def index():
 
     db = _get_db()
     user = db.execute(
-        ("SELECT tier, is_beta, stripe_customer_id, stripe_subscription_id FROM users WHEREuser_id = ?"),
+        ("SELECT tier, is_beta, stripe_customer_id, stripe_subscription_id FROM users WHERE user_id = ?"),
         (user_id,),
     ).fetchone()
 

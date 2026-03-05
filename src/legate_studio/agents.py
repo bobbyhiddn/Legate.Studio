@@ -1003,7 +1003,7 @@ def api_retry_spawn(queue_id: str):
 
         # Get the failed agent - MUST belong to current user
         row = agents_db.execute(
-            ("SELECT * FROM agent_queue WHERE queue_id = ? AND status = 'spawn_failed' ANDuser_id = ?"),
+            ("SELECT * FROM agent_queue WHERE queue_id = ? AND status = 'spawn_failed' AND user_id = ?"),
             (queue_id, user_id),
         ).fetchone()
 
@@ -1123,7 +1123,7 @@ def api_reject_all():
 
         # Get all pending agents for THIS USER with their linked entries
         pending = db.execute(
-            ("SELECT queue_id, related_entry_id FROM agent_queue WHERE status = 'pending' ANDuser_id = ?"),
+            ("SELECT queue_id, related_entry_id FROM agent_queue WHERE status = 'pending' AND user_id = ?"),
             (user_id,),
         ).fetchall()
 
@@ -1273,7 +1273,7 @@ def api_add_comment(queue_id: str):
 
         # Get current comments - MUST belong to current user
         agent = db.execute(
-            ("SELECT comments FROM agent_queue WHERE queue_id = ? AND status = 'pending' ANDuser_id = ?"),
+            ("SELECT comments FROM agent_queue WHERE queue_id = ? AND status = 'pending' AND user_id = ?"),
             (queue_id, user_id),
         ).fetchone()
 
@@ -1295,7 +1295,7 @@ def api_add_comment(queue_id: str):
 
         # Save - include user_id check for safety
         db.execute(
-            ("UPDATE agent_queue SET comments = ?, updated_at = CURRENT_TIMESTAMP WHEREqueue_id = ? AND user_id = ?"),
+            ("UPDATE agent_queue SET comments = ?, updated_at = CURRENT_TIMESTAMP WHERE queue_id = ? AND user_id = ?"),
             (json.dumps(comments), queue_id, user_id),
         )
         db.commit()
@@ -1777,7 +1777,7 @@ def import_chords_from_library(legato_db, agents_db, user_id: str = None) -> dic
         already_queued = False
         for entry_id in entry_ids:
             existing = agents_db.execute(
-                ("SELECT queue_id, status FROM agent_queue WHERE related_entry_id LIKE ? ANDuser_id = ?"),
+                ("SELECT queue_id, status FROM agent_queue WHERE related_entry_id LIKE ? AND user_id = ?"),
                 (f"%{entry_id}%", user_id),
             ).fetchone()
             if existing:
