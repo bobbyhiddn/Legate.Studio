@@ -1,8 +1,8 @@
-# fly.dev.toml — Development environment Fly.io config
+# fly.dev.toml — Development environment Fly.io config for Legate Studio
 # Used by .github/workflows/dev-deploy.yml (deploys from the 'develop' branch)
 # App name differs from production (legato-pit) to keep envs isolated.
 
-app = 'legato-pit-dev'
+app = 'legate-studio-dev'
 primary_region = 'dfw'
 
 [build]

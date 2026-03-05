@@ -1,6 +1,6 @@
-# Legato Documentation
+# Legate Studio Documentation
 
-Comprehensive architecture and operational documentation for the Legato ecosystem.
+Comprehensive architecture and operational documentation for the Legate Studio ecosystem.
 
 ## Contents
 
@@ -13,7 +13,7 @@ Comprehensive architecture and operational documentation for the Legato ecosyste
 
 ## Quick Start
 
-Legato transforms voice transcripts into structured knowledge and executable projects:
+Legate Studio transforms voice transcripts into structured knowledge and executable projects:
 
 ```
 Voice Transcript → Classification → Knowledge Library → Project Spawning → Autonomous Implementation
@@ -21,9 +21,9 @@ Voice Transcript → Classification → Knowledge Library → Project Spawning �
 
 ### Core Components
 
-- **Legato.Pit** - Web dashboard, MCP server, OAuth, RAG system
+- **Legate Studio** - Web dashboard, MCP server, OAuth, RAG system
 - **Legato.Conduct** - Orchestrator, classification pipeline, GitHub Actions
-- **Legato.Library** - Git-native knowledge repository
+- **Legate.Library** - Git-native knowledge repository
 - **Legato.Lab/*** - Spawned project repositories
 
 ### Key Flows

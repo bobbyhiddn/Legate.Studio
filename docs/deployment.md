@@ -6,13 +6,13 @@
 graph TB
     subgraph Cloud["Cloud Infrastructure"]
         subgraph Fly["Fly.io"]
-            Pit["Legato.Pit<br/>Flask Application"]
+            Pit["Legate Studio<br/>Flask Application"]
             Vol[(Persistent Volume<br/>/data)]
         end
 
         subgraph GitHub["GitHub"]
             Conduct["Legato.Conduct<br/>GitHub Actions"]
-            Library["Legato.Library<br/>Git Repository"]
+            Library["Legate.Library<br/>Git Repository"]
             Lab["Legato.Lab/*<br/>Project Repos"]
         end
     end
@@ -112,9 +112,9 @@ fly logs
 
 1. Go to GitHub → Settings → Developer settings → OAuth Apps
 2. Create new OAuth App:
-   - **Application name:** Legato Pit
-   - **Homepage URL:** `https://legato-pit.fly.dev`
-   - **Authorization callback URL:** `https://legato-pit.fly.dev/auth/github/callback`
+   - **Application name:** Legate Studio
+   - **Homepage URL:** `https://legate.studio`
+   - **Authorization callback URL:** `https://legate.studio/auth/github/callback`
 3. Copy Client ID and Client Secret to Fly secrets
 
 ---
@@ -130,9 +130,9 @@ Set these in Legato.Conduct → Settings → Secrets and variables → Actions:
 | Secret | Purpose |
 |--------|---------|
 | `ANTHROPIC_API_KEY` | Claude API for classification |
-| `LIBRARY_PAT` | Write access to Legato.Library |
+| `LIBRARY_PAT` | Write access to Legate.Library |
 | `LAB_PAT` | Create repos in Legato.Lab |
-| `PIT_URL` | Pit URL (e.g., `https://legato-pit.fly.dev`) |
+| `PIT_URL` | Pit URL (e.g., `https://legate.studio`) |
 | `SYSTEM_PAT` | API access to Pit |
 
 ### Workflow Permissions
@@ -149,8 +149,8 @@ In Legato.Conduct → Settings → Actions → General:
 
 ```bash
 # Clone template or create manually
-mkdir Legato.Library
-cd Legato.Library
+mkdir Legate.Library
+cd Legate.Library
 
 # Create category directories
 mkdir epiphanies concepts reflections glimmers reminders worklog
@@ -162,7 +162,7 @@ echo "[]" > index.json
 git init
 git add .
 git commit -m "Initial library structure"
-git remote add origin git@github.com:username/Legato.Library.git
+git remote add origin git@github.com:username/Legate.Library.git
 git push -u origin main
 ```
 
@@ -256,7 +256,7 @@ Required scopes:
 ### In Claude.ai
 
 1. Go to Settings → Connectors
-2. Add custom connector: `https://legato-pit.fly.dev/mcp`
+2. Add custom connector: `https://legate.studio/mcp`
 3. Complete GitHub OAuth flow
 4. Verify connection (green status)
 
@@ -264,14 +264,14 @@ Required scopes:
 
 ```bash
 # Test OAuth discovery
-curl https://legato-pit.fly.dev/.well-known/oauth-authorization-server
+curl https://legate.studio/.well-known/oauth-authorization-server
 
 # Test MCP protocol version
-curl -I https://legato-pit.fly.dev/mcp
+curl -I https://legate.studio/mcp
 # Should return: MCP-Protocol-Version: 2025-06-18
 
 # Test with token (get from OAuth flow)
-curl -X POST https://legato-pit.fly.dev/mcp \
+curl -X POST https://legate.studio/mcp \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
@@ -285,10 +285,10 @@ curl -X POST https://legato-pit.fly.dev/mcp \
 
 ```bash
 # Pit health
-curl https://legato-pit.fly.dev/health
+curl https://legate.studio/health
 
 # RAG health
-curl https://legato-pit.fly.dev/memory/api/health
+curl https://legate.studio/memory/api/health
 ```
 
 ### Logs
@@ -333,7 +333,7 @@ fly sftp get /data/legato-backup.db
 Library is Git-native - full history preserved:
 
 ```bash
-git clone git@github.com:username/Legato.Library.git
+git clone git@github.com:username/Legate.Library.git
 ```
 
 ---

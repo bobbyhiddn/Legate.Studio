@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for legato-proud-surf-9686 on 2026-01-08T10:55:58-07:00
+# fly.toml app configuration file for Legate Studio — generated for legato-proud-surf-9686 on 2026-01-08T10:55:58-07:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'legato-pit'
+app = 'legate-studio'
 primary_region = 'dfw'
 
 [build]

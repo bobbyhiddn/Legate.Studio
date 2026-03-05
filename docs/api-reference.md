@@ -402,10 +402,10 @@ OAuth 2.1 server metadata (RFC 8414).
 **Response:**
 ```json
 {
-  "issuer": "https://legato-pit.fly.dev",
-  "authorization_endpoint": "https://legato-pit.fly.dev/oauth/authorize",
-  "token_endpoint": "https://legato-pit.fly.dev/oauth/token",
-  "registration_endpoint": "https://legato-pit.fly.dev/oauth/register",
+  "issuer": "https://legate.studio",
+  "authorization_endpoint": "https://legate.studio/oauth/authorize",
+  "token_endpoint": "https://legate.studio/oauth/token",
+  "registration_endpoint": "https://legate.studio/oauth/register",
   "response_types_supported": ["code"],
   "grant_types_supported": ["authorization_code", "refresh_token"],
   "code_challenge_methods_supported": ["S256"],
