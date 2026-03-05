@@ -1182,7 +1182,7 @@ def setup_api_key():
     provider = request.form.get("provider")
     api_key = request.form.get("api_key")
 
-    if provider not in ("anthropic", "openai"):
+    if provider not in ("anthropic", "openai", "gemini"):
         flash("Invalid API provider.", "error")
         return redirect(url_for("auth.setup"))
 

@@ -129,6 +129,7 @@
 
         {% set anthropic_key = api_keys|selectattr('provider', 'equalto', 'anthropic')|first %}
         {% set openai_key = api_keys|selectattr('provider', 'equalto', 'openai')|first %}
+        {% set gemini_key = api_keys|selectattr('provider', 'equalto', 'gemini')|first %}
 
         <form method="post" action="{{ url_for('auth.setup_api_key') }}" class="api-key-form">
             <div class="form-group">
@@ -150,6 +151,18 @@
                        placeholder="{% if openai_key %}****{{ openai_key.key_hint }}{% else %}sk-...{% endif %}">
                 <button type="submit" class="btn btn-secondary btn-sm">
                     {% if openai_key %}Update{% else %}Save{% endif %}
+                </button>
+            </div>
+        </form>
+
+        <form method="post" action="{{ url_for('auth.setup_api_key') }}" class="api-key-form">
+            <div class="form-group">
+                <label for="gemini_key">Google Gemini API Key</label>
+                <input type="hidden" name="provider" value="gemini">
+                <input type="password" name="api_key" id="gemini_key"
+                       placeholder="{% if gemini_key %}****{{ gemini_key.key_hint }}{% else %}AIzaSy...{% endif %}">
+                <button type="submit" class="btn btn-secondary btn-sm">
+                    {% if gemini_key %}Update{% else %}Save{% endif %}
                 </button>
             </div>
         </form>

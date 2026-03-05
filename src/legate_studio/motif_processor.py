@@ -299,8 +299,9 @@ class MotifProcessor:
         db.commit()
 
     def _classify_threads(self, threads: list[dict]):
-        """Classify all threads via Claude API."""
-        api_key = self._get_user_api_key()
+        """Classify all threads via AI provider."""
+        api_key, provider = self._get_user_api_key()
+        self._current_provider = provider
         categories = self._get_user_categories()
 
         # Build prompt with user categories if custom
@@ -514,7 +515,8 @@ class MotifProcessor:
 
     def _extract_threads(self):
         """Generate markdown artifacts for threads marked CREATE."""
-        api_key = self._get_user_api_key()
+        api_key, provider = self._get_user_api_key()
+        self._current_provider = provider
 
         from .rag.database import init_db
 
@@ -714,14 +716,31 @@ Generate the complete markdown artifact with frontmatter."""
             ),
         )
 
-    def _get_user_api_key(self) -> str:
-        """Get user's Anthropic API key (platform key for managed tier, or BYOK)."""
+    def _get_user_api_key(self) -> tuple[str, str]:
+        """Get user's AI provider API key and provider name.
+
+        Priority order: anthropic → gemini → openai (or follows CHAT_PROVIDER env var for managed tier)
+        Returns:
+            Tuple of (api_key, provider_name)
+        """
         from .core import get_api_key_for_user
 
-        api_key = get_api_key_for_user(self.user_id, "anthropic")
-        if not api_key:
-            raise ValueError("User has no Anthropic API key configured. Please add your API key in Settings.")
-        return api_key
+        # Try each provider in priority order
+        for provider in ("anthropic", "gemini", "openai"):
+            api_key = get_api_key_for_user(self.user_id, provider)
+            if api_key:
+                return api_key, provider
+
+        raise ValueError(
+            "No AI provider API key configured. "
+            "Please add an API key (Anthropic, Gemini, or OpenAI) in Settings."
+        )
+
+    def _get_provider_name(self) -> str:
+        """Get the provider name from environment (for managed tier context)."""
+        import os
+
+        return os.environ.get("CHAT_PROVIDER", "anthropic").lower()
 
     def _get_user_categories(self) -> list[dict]:
         """Get user's custom categories."""
@@ -749,7 +768,23 @@ Generate the complete markdown artifact with frontmatter."""
             return []
 
     def _call_claude(self, system: str, user: str, api_key: str) -> str:
-        """Make a call to Claude API."""
+        """Make a call to the AI provider (Anthropic, Gemini, or OpenAI).
+
+        Determines provider from the api_key tuple returned by _get_user_api_key().
+        Kept as _call_claude for backward compatibility — actually dispatches by provider.
+        """
+        # api_key here is the raw key string; provider stored in self._current_provider
+        provider = getattr(self, "_current_provider", "anthropic")
+
+        if provider == "gemini":
+            return self._call_gemini(system=system, user=user, api_key=api_key)
+        elif provider == "openai":
+            return self._call_openai(system=system, user=user, api_key=api_key)
+        else:
+            return self._call_anthropic(system=system, user=user, api_key=api_key)
+
+    def _call_anthropic(self, system: str, user: str, api_key: str) -> str:
+        """Make a call to Claude (Anthropic) API."""
         import anthropic
 
         client = anthropic.Anthropic(api_key=api_key)
@@ -762,6 +797,38 @@ Generate the complete markdown artifact with frontmatter."""
         )
 
         return response.content[0].text
+
+    def _call_gemini(self, system: str, user: str, api_key: str) -> str:
+        """Make a call to Gemini API (using google-genai SDK)."""
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=user,
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                max_output_tokens=4096,
+                temperature=0.3,
+            ),
+        )
+        return response.text
+
+    def _call_openai(self, system: str, user: str, api_key: str) -> str:
+        """Make a call to OpenAI API."""
+        import openai
+
+        client = openai.OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            max_tokens=4096,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return response.choices[0].message.content
 
     def _generate_entry_id(self, category: str, title: str) -> str:
         """Generate a unique entry ID."""

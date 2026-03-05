@@ -482,6 +482,7 @@
             <select id="providerSelect" class="model-select" onchange="updateModelOptions()">
                 <option value="claude" {% if provider == 'claude' %}selected{% endif %}>Claude</option>
                 <option value="openai" {% if provider == 'openai' %}selected{% endif %}>OpenAI</option>
+                <option value="gemini" {% if provider == 'gemini' %}selected{% endif %}>Gemini</option>
             </select>
             <select id="modelSelect" class="model-select">
             </select>
@@ -526,7 +527,8 @@
     // Model options per provider (fetched from API)
     let modelOptions = {
         claude: [],
-        openai: []
+        openai: [],
+        gemini: []
     };
 
     async function fetchModels() {
@@ -546,6 +548,12 @@
                     label: m.name
                 }));
             }
+            if (data.gemini) {
+                modelOptions.gemini = data.gemini.map(m => ({
+                    value: m.id,
+                    label: m.name
+                }));
+            }
 
             updateModelOptions();
         } catch (error) {
@@ -559,6 +567,11 @@
                 openai: [
                     { value: 'gpt-4o', label: 'GPT-4o' },
                     { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+                ],
+                gemini: [
+                    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+                    { value: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash' },
+                    { value: 'gemini-2.5-pro-preview-05-06', label: 'Gemini 2.5 Pro' },
                 ]
             };
             updateModelOptions();

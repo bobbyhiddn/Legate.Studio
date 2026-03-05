@@ -49,9 +49,13 @@ def get_services():
         context_builder = ContextBuilder(embedding_service)
 
         # Create chat service
-        chat_provider = ChatProvider.CLAUDE
-        if os.environ.get("CHAT_PROVIDER", "claude").lower() == "openai":
+        provider_name = os.environ.get("CHAT_PROVIDER", "claude").lower()
+        if provider_name == "gemini":
+            chat_provider = ChatProvider.GEMINI
+        elif provider_name == "openai":
             chat_provider = ChatProvider.OPENAI
+        else:
+            chat_provider = ChatProvider.CLAUDE
 
         chat_service = ChatService(
             provider=chat_provider,
@@ -524,11 +528,18 @@ def get_models():
                     "openai": ChatService.get_available_models(ChatProvider.OPENAI),
                 }
             )
+        elif provider == "gemini":
+            return jsonify(
+                {
+                    "gemini": ChatService.get_available_models(ChatProvider.GEMINI),
+                }
+            )
         else:
             return jsonify(
                 {
                     "claude": ChatService.get_available_models(ChatProvider.CLAUDE),
                     "openai": ChatService.get_available_models(ChatProvider.OPENAI),
+                    "gemini": ChatService.get_available_models(ChatProvider.GEMINI),
                 }
             )
     except Exception as e:

@@ -57,12 +57,16 @@ def submit_job():
     if not user_id:
         return jsonify({"error": "User not authenticated"}), 401
 
-    # Check if user has API key configured (platform key for managed tier, or BYOK)
-    api_key = get_api_key_for_user(user_id, "anthropic")
+    # Check if user has any AI provider key configured (platform key for managed tier, or BYOK)
+    api_key = (
+        get_api_key_for_user(user_id, "anthropic")
+        or get_api_key_for_user(user_id, "gemini")
+        or get_api_key_for_user(user_id, "openai")
+    )
     if not api_key:
         return jsonify(
             {
-                "error": "No Anthropic API key configured. Please add your API key in Settings.",
+                "error": "No AI provider API key configured. Please add an API key in Settings.",
                 "missing_key": True,
             }
         ), 400
