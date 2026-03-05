@@ -503,7 +503,7 @@ def init_db(db_path: Path | None = None, user_id: str | None = None) -> sqlite3.
     """)
 
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_threads_job ON processing_threads(job_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_threads_status ONprocessing_threads(job_id, status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_threads_status ON processing_threads(job_id, status)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_jobs_locked ON processing_jobs(status,locked_until)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_jobs_user ON processing_jobs(user_id)")
 
