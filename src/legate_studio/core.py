@@ -87,7 +87,7 @@ def _get_or_create_persistent_key(env_var: str, filename: str) -> str:
         key_path.write_text(key)
         logger.info(f"Generated and persisted {env_var} to {key_path}")
         return key
-    except OSError:
+    except OSError as exc:
         # Could not persist — using ephemeral key
         is_multi_tenant = os.getenv("LEGATO_MODE") == "multi-tenant"
         if is_multi_tenant:
@@ -97,7 +97,7 @@ def _get_or_create_persistent_key(env_var: str, filename: str) -> str:
                 f"invalidate all user sessions and JWTs on every restart. "
                 f"Set {env_var} as an environment variable or mount a persistent "
                 f"volume at /data. Refusing to start with ephemeral key."
-            )
+            ) from exc
         logger.error(
             f"Could not persist {env_var} to {key_path} — using ephemeral key. "
             f"All sessions and JWTs will be invalidated on restart. "
