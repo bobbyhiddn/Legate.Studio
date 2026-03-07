@@ -635,19 +635,226 @@ def create_app():
     # SEO: sitemap.xml
     @app.route("/sitemap.xml")
     def sitemap_xml():
+        from .rag.database import get_db_dir, get_user_db_path, init_db
+
         today = datetime.now().strftime("%Y-%m-%d")
-        xml = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-            "  <url>\n"
-            "    <loc>https://legate.studio/</loc>\n"
-            f"    <lastmod>{today}</lastmod>\n"
-            "    <changefreq>weekly</changefreq>\n"
-            "    <priority>1.0</priority>\n"
-            "  </url>\n"
-            "</urlset>\n"
-        )
+        urls = [
+            (
+                "https://legate.studio/",
+                today,
+                "weekly",
+                "1.0",
+            )
+        ]
+
+        # Include published notes from all user DBs
+        try:
+            # Find all user DB files (legato_<user_id>.db pattern)
+            db_dir = get_db_dir()
+            shared_db = init_db()  # shared db has users table with github_login
+            users = shared_db.execute("SELECT user_id, github_login FROM users").fetchall()
+            for user_row in users:
+                user_id = user_row["user_id"]
+                github_login = user_row["github_login"]
+                if not github_login:
+                    continue
+                try:
+                    import sqlite3
+                    user_db_path = get_user_db_path(user_id)
+                    if not user_db_path.exists():
+                        continue
+                    uconn = sqlite3.connect(str(user_db_path))
+                    uconn.row_factory = sqlite3.Row
+                    notes = uconn.execute(
+                        "SELECT slug, updated_at FROM knowledge_entries WHERE published = 1 AND slug IS NOT NULL"
+                    ).fetchall()
+                    uconn.close()
+                    for note in notes:
+                        slug = note["slug"]
+                        lastmod = (note["updated_at"] or today)[:10]
+                        loc = f"https://legate.studio/pub/{github_login}/{slug}"
+                        urls.append((loc, lastmod, "weekly", "0.6"))
+                except Exception as e:
+                    logger.warning(f"Sitemap: failed to read published notes for {user_id}: {e}")
+        except Exception as e:
+            logger.warning(f"Sitemap: failed to enumerate user DBs: {e}")
+
+        lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        ]
+        for loc, lastmod, changefreq, priority in urls:
+            lines += [
+                "  <url>",
+                f"    <loc>{loc}</loc>",
+                f"    <lastmod>{lastmod}</lastmod>",
+                f"    <changefreq>{changefreq}</changefreq>",
+                f"    <priority>{priority}</priority>",
+                "  </url>",
+            ]
+        lines.append("</urlset>")
+        xml = "\n".join(lines) + "\n"
         return xml, 200, {"Content-Type": "application/xml; charset=utf-8"}
+
+    # ============ Public note routes (no auth) ============
+
+    @app.route("/pub/<username>/<slug>")
+    def pub_note(username: str, slug: str):
+        """Render a publicly published note. No authentication required."""
+        import json
+        import sqlite3
+
+        import markdown
+        import nh3
+
+        from .rag.database import get_user_db_path, init_db
+
+        # Look up user by github_login in shared DB
+        shared_db = init_db()
+        user_row = shared_db.execute(
+            "SELECT user_id, github_login FROM users WHERE github_login = ?", (username,)
+        ).fetchone()
+        if not user_row:
+            return render_template("error.html", title="Not Found", message="User not found"), 404
+
+        user_id = user_row["user_id"]
+        user_db_path = get_user_db_path(user_id)
+        if not user_db_path.exists():
+            return render_template("error.html", title="Not Found", message="Note not found"), 404
+
+        # Open user DB and find the published note
+        try:
+            uconn = sqlite3.connect(str(user_db_path))
+            uconn.row_factory = sqlite3.Row
+            note = uconn.execute(
+                "SELECT * FROM knowledge_entries WHERE slug = ? AND published = 1",
+                (slug,),
+            ).fetchone()
+            uconn.close()
+        except Exception as e:
+            logger.error(f"pub_note: failed to query user DB for {username}/{slug}: {e}")
+            return render_template("error.html", title="Server Error", message="An error occurred"), 500
+
+        if not note:
+            return render_template("error.html", title="Not Found", message="Note not found or not published"), 404
+
+        note_dict = dict(note)
+
+        # Render markdown → safe HTML using same pipeline as library
+        from .library import render_markdown
+        content_html = render_markdown(note_dict.get("content", ""))
+
+        # Parse JSON tags
+        domain_tags = []
+        if note_dict.get("domain_tags"):
+            try:
+                domain_tags = json.loads(note_dict["domain_tags"])
+            except (json.JSONDecodeError, TypeError):
+                domain_tags = []
+
+        key_phrases = []
+        if note_dict.get("key_phrases"):
+            try:
+                key_phrases = json.loads(note_dict["key_phrases"])
+            except (json.JSONDecodeError, TypeError):
+                key_phrases = []
+
+        canonical_url = f"https://legate.studio/pub/{username}/{slug}"
+        published_at = note_dict.get("published_at") or note_dict.get("created_at", "")
+        updated_at = note_dict.get("updated_at") or published_at
+
+        return render_template(
+            "published_note.html",
+            note=note_dict,
+            content_html=content_html,
+            domain_tags=domain_tags,
+            key_phrases=key_phrases,
+            username=username,
+            slug=slug,
+            canonical_url=canonical_url,
+            published_at=published_at,
+            updated_at=updated_at,
+            report_url=f"/pub/{username}/{slug}/report",
+            # OG / SEO vars
+            og_title=note_dict.get("title", "Note"),
+            og_description=(note_dict.get("content", "")[:160].replace("\n", " ") if note_dict.get("content") else ""),
+            og_url=canonical_url,
+        )
+
+    @app.route("/pub/<username>/<slug>/report", methods=["GET", "POST"])
+    def pub_note_report(username: str, slug: str):
+        """Report a published note for content moderation."""
+        import sqlite3
+
+        from .rag.database import get_db_path, get_user_db_path, init_db, get_connection
+
+        # Verify note exists and is published
+        shared_db = init_db()
+        user_row = shared_db.execute(
+            "SELECT user_id FROM users WHERE github_login = ?", (username,)
+        ).fetchone()
+
+        note_exists = False
+        if user_row:
+            user_db_path = get_user_db_path(user_row["user_id"])
+            if user_db_path.exists():
+                try:
+                    uconn = sqlite3.connect(str(user_db_path))
+                    uconn.row_factory = sqlite3.Row
+                    n = uconn.execute(
+                        "SELECT entry_id FROM knowledge_entries WHERE slug = ? AND published = 1",
+                        (slug,),
+                    ).fetchone()
+                    uconn.close()
+                    note_exists = bool(n)
+                except Exception:
+                    pass
+
+        if not note_exists:
+            return render_template("error.html", title="Not Found", message="Note not found"), 404
+
+        submitted = False
+        error = None
+
+        if request.method == "POST":
+            reason = request.form.get("reason", "").strip()
+            details = request.form.get("details", "").strip()
+            valid_reasons = ["spam", "harassment", "misinformation", "illegal", "other"]
+
+            if not reason or reason not in valid_reasons:
+                error = "Please select a valid reason."
+            else:
+                try:
+                    # Store report in the shared DB's content_reports table
+                    shared_conn = get_connection(get_db_path("legato.db"))
+                    shared_conn.execute(
+                        """
+                        INSERT INTO content_reports (reported_username, slug, reason, details, reporter_ip)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            username,
+                            slug,
+                            reason,
+                            details[:2000] if details else None,
+                            request.remote_addr,
+                        ),
+                    )
+                    shared_conn.commit()
+                    shared_conn.close()
+                    submitted = True
+                except Exception as e:
+                    logger.error(f"pub_note_report: failed to store report for {username}/{slug}: {e}")
+                    error = "Failed to submit report. Please try again."
+
+        return render_template(
+            "report_note.html",
+            username=username,
+            slug=slug,
+            note_url=f"/pub/{username}/{slug}",
+            submitted=submitted,
+            error=error,
+        )
 
     # Health check (no auth required)
     @app.route("/health")

@@ -411,6 +411,20 @@ def init_db(db_path: Path | None = None, user_id: str | None = None) -> sqlite3.
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Migration: Add publishing columns for public note sharing
+    try:
+        cursor.execute("ALTER TABLE knowledge_entries ADD COLUMN published INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    try:
+        cursor.execute("ALTER TABLE knowledge_entries ADD COLUMN slug TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    try:
+        cursor.execute("ALTER TABLE knowledge_entries ADD COLUMN published_at DATETIME DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     # Migration: Add due_date column to knowledge_entries if it doesn't exist
     try:
         cursor.execute("ALTER TABLE knowledge_entries ADD COLUMN due_date DATE")
@@ -437,6 +451,8 @@ def init_db(db_path: Path | None = None, user_id: str | None = None) -> sqlite3.
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_entry_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_jobs_status ON processing_jobs(status)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_content_hash ON knowledge_entries(content_hash)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_knowledge_published ON knowledge_entries(published)")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_slug ON knowledge_entries(slug) WHERE slug IS NOT NULL")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_oauth_clients ON oauth_clients(client_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_oauth_auth_codes ON oauth_auth_codes(code)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_oauth_sessions ON oauth_sessions(refresh_token)")
@@ -818,6 +834,22 @@ def init_db(db_path: Path | None = None, user_id: str | None = None) -> sqlite3.
         cursor.execute("ALTER TABLE system_config ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP")
     except sqlite3.OperationalError:
         pass  # Column already exists
+
+    # Content reports for public note moderation
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS content_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reported_username TEXT NOT NULL,
+            slug TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            details TEXT,
+            reporter_ip TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_reports_slug ON content_reports(reported_username, slug)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_reports_status ON content_reports(status)")
 
     # Multi-tenant indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_github ON users(github_id)")

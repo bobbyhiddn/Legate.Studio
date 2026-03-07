@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0d1117">
+
+    <!-- Primary meta -->
+    <title>{{ note.title }} — Legate Studio</title>
+    <meta name="description" content="{{ og_description }}">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Legate Studio">
+    <meta property="og:title" content="{{ og_title }}">
+    <meta property="og:description" content="{{ og_description }}">
+    <meta property="og:url" content="{{ canonical_url }}">
+    <meta property="og:image" content="https://legate.studio/static/img/og-share.png">
+    {% if published_at %}
+    <meta property="article:published_time" content="{{ published_at }}">
+    {% endif %}
+    {% if updated_at %}
+    <meta property="article:modified_time" content="{{ updated_at }}">
+    {% endif %}
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ og_title }}">
+    <meta name="twitter:description" content="{{ og_description }}">
+    <meta name="twitter:image" content="https://legate.studio/static/img/og-share.png">
+
+    <!-- Canonical -->
+    <link rel="canonical" href="{{ canonical_url }}">
+
+    <!-- Favicon -->
+    <link rel="icon" href="/static/img/favicon.png" type="image/png">
+
+    <!-- Prism.js for code highlighting -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
+
+    <!-- Plausible analytics -->
+    <script defer data-domain="legate.studio" src="https://plausible.io/js/script.js"></script>
+
+    <!-- JSON-LD: Article schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      "headline": {{ note.title | tojson }},
+      "description": {{ og_description | tojson }},
+      "url": {{ canonical_url | tojson }},
+      "datePublished": {{ (published_at or '') | tojson }},
+      "dateModified": {{ (updated_at or '') | tojson }},
+      "author": {
+        "@type": "Person",
+        "name": {{ username | tojson }},
+        "url": {{ ('https://github.com/' ~ username) | tojson }}
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Legate Studio",
+        "url": "https://legate.studio"
+      }
+    }
+    </script>
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --border-color: #30363d;
+            --border-subtle: #21262d;
+            --accent: #7c6af7;
+            --accent-light: #a5b4fc;
+            --link-color: #7c6af7;
+            --code-bg: #161b22;
+            --tag-bg: #21262d;
+            --tag-text: #a5b4fc;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        a { color: var(--link-color); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* ===== Header / Nav ===== */
+        .pub-nav {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0 1.5rem;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .pub-nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 0.95rem;
+            flex-shrink: 0;
+        }
+
+        .pub-nav-logo img {
+            height: 24px;
+            width: auto;
+        }
+
+        .pub-nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.375rem 0.875rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            font-size: 0.8125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: color 0.15s, border-color 0.15s, background 0.15s;
+            text-decoration: none;
+        }
+
+        .btn-secondary:hover {
+            color: var(--text-primary);
+            border-color: var(--accent);
+            background: var(--bg-tertiary);
+            text-decoration: none;
+        }
+
+        .btn-copy {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.375rem 0.875rem;
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--accent-light);
+            font-size: 0.8125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .btn-copy:hover { background: rgba(124, 106, 247, 0.1); }
+
+        /* ===== Main layout ===== */
+        .pub-container {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 2.5rem 1.5rem 4rem;
+        }
+
+        /* ===== Article header ===== */
+        .article-header {
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .article-meta-top {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .category-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.2rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: rgba(124, 106, 247, 0.15);
+            color: var(--accent-light);
+            border: 1px solid rgba(124, 106, 247, 0.3);
+        }
+
+        .meta-dot {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .meta-author {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .meta-author a {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .meta-author a:hover {
+            color: var(--accent-light);
+            text-decoration: none;
+        }
+
+        .meta-date {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+        }
+
+        .article-title {
+            font-size: clamp(1.5rem, 4vw, 2.25rem);
+            font-weight: 700;
+            line-height: 1.25;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            margin-bottom: 0;
+        }
+
+        /* ===== Article body ===== */
+        .article-body {
+            font-size: 1rem;
+            line-height: 1.8;
+            color: var(--text-primary);
+        }
+
+        .article-body h1,
+        .article-body h2,
+        .article-body h3,
+        .article-body h4,
+        .article-body h5,
+        .article-body h6 {
+            color: var(--text-primary);
+            font-weight: 600;
+            line-height: 1.3;
+            margin-top: 2rem;
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.01em;
+        }
+
+        .article-body h1 { font-size: 1.75rem; }
+        .article-body h2 { font-size: 1.375rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.4rem; }
+        .article-body h3 { font-size: 1.125rem; }
+        .article-body h4 { font-size: 1rem; }
+
+        .article-body p { margin-bottom: 1.25rem; }
+
+        .article-body a {
+            color: var(--accent-light);
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+
+        .article-body a:hover { color: var(--accent); }
+
+        .article-body ul,
+        .article-body ol {
+            padding-left: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .article-body li { margin-bottom: 0.35rem; }
+
+        .article-body blockquote {
+            border-left: 3px solid var(--accent);
+            padding-left: 1rem;
+            margin: 1.5rem 0;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .article-body code {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.875em;
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.15em 0.4em;
+            color: #f8c8d4;
+        }
+
+        .article-body pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+
+        .article-body pre code {
+            background: none;
+            border: none;
+            padding: 0;
+            color: inherit;
+            font-size: inherit;
+        }
+
+        .article-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        .article-body th,
+        .article-body td {
+            padding: 0.625rem 0.875rem;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        .article-body th {
+            background: var(--bg-secondary);
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .article-body tr:nth-child(even) td {
+            background: rgba(255,255,255,0.02);
+        }
+
+        .article-body img {
+            max-width: 100%;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin: 1rem 0;
+        }
+
+        .article-body hr {
+            border: none;
+            border-top: 1px solid var(--border-subtle);
+            margin: 2rem 0;
+        }
+
+        /* ===== Tags ===== */
+        .article-tags {
+            margin-top: 2.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .tags-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            margin-bottom: 0.625rem;
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .tag-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.625rem;
+            background: var(--tag-bg);
+            color: var(--tag-text);
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border: 1px solid var(--border-color);
+        }
+
+        /* ===== Footer ===== */
+        .pub-footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .footer-brand {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+        }
+
+        .footer-brand a {
+            color: var(--accent-light);
+            font-weight: 500;
+        }
+
+        .footer-brand a:hover { text-decoration: underline; }
+
+        .footer-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .report-link {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-decoration: none;
+        }
+
+        .report-link:hover {
+            color: #f87171;
+            text-decoration: underline;
+        }
+
+        /* ===== Copy notification ===== */
+        .copy-notice {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.625rem 1rem;
+            border-radius: 8px;
+            font-size: 0.8125rem;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 600px) {
+            .pub-container { padding: 1.5rem 1rem 3rem; }
+            .article-title { font-size: 1.5rem; }
+            .pub-nav { padding: 0 1rem; }
+            .btn-copy .label { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Nav -->
+    <nav class="pub-nav">
+        <a href="https://legate.studio" class="pub-nav-logo">
+            <img src="/static/img/logo-light.png" alt="Legate Studio" onerror="this.style.display='none'">
+            Legate Studio
+        </a>
+        <div class="pub-nav-actions">
+            <button class="btn-copy" onclick="copyUrl()" title="Copy link to this note">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span class="label">Copy link</span>
+            </button>
+            <a href="https://legate.studio" class="btn-secondary">Open Legate</a>
+        </div>
+    </nav>
+
+    <!-- Article -->
+    <main class="pub-container">
+        <article>
+            <header class="article-header">
+                <div class="article-meta-top">
+                    {% if note.category %}
+                    <span class="category-badge">{{ note.category }}</span>
+                    <span class="meta-dot">·</span>
+                    {% endif %}
+                    <span class="meta-author">
+                        by <a href="https://github.com/{{ username }}" target="_blank" rel="noopener">{{ username }}</a>
+                    </span>
+                    {% if published_at %}
+                    <span class="meta-dot">·</span>
+                    <time class="meta-date" datetime="{{ published_at }}">
+                        {{ published_at[:10] if published_at else '' }}
+                    </time>
+                    {% endif %}
+                </div>
+                <h1 class="article-title">{{ note.title }}</h1>
+            </header>
+
+            <div class="article-body">
+                {{ content_html | safe }}
+            </div>
+
+            {% if domain_tags %}
+            <div class="article-tags">
+                <div class="tags-label">Tags</div>
+                <div class="tag-list">
+                    {% for tag in domain_tags %}
+                    <span class="tag-pill">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <footer class="pub-footer">
+                <div class="footer-brand">
+                    Published with <a href="https://legate.studio" target="_blank" rel="noopener">Legate Studio</a>
+                </div>
+                <div class="footer-actions">
+                    <a href="{{ report_url }}" class="report-link">Report this note</a>
+                </div>
+            </footer>
+        </article>
+    </main>
+
+    <!-- Copy URL notice -->
+    <div class="copy-notice" id="copyNotice">Link copied!</div>
+
+    <!-- Prism.js -->
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+
+    <script>
+        function copyUrl() {
+            navigator.clipboard.writeText(window.location.href).then(function() {
+                var notice = document.getElementById('copyNotice');
+                notice.style.display = 'block';
+                setTimeout(function() { notice.style.display = 'none'; }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -3234,3 +3234,113 @@ def api_cleanup_orphans():
     except Exception as e:
         logger.error(f"Cleanup orphans failed: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# ============ Publishing API ============
+
+
+def _slugify(text: str, max_length: int = 80) -> str:
+    """Convert text to a URL-safe slug.
+
+    Lowercases, replaces non-alphanumeric with hyphens, collapses runs,
+    trims leading/trailing hyphens, and truncates to max_length chars.
+    """
+    import re
+
+    slug = text.lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    slug = slug.strip("-")
+    slug = slug[:max_length].rstrip("-")
+    return slug or "note"
+
+
+def _unique_slug(db, title: str, existing_entry_id: str | None = None) -> str:
+    """Generate a slug from title that is unique within this user's DB.
+
+    Appends -2, -3, etc. on collisions (skipping the current entry's own slug).
+    """
+    base = _slugify(title)
+    candidate = base
+    counter = 2
+    while True:
+        row = db.execute(
+            "SELECT entry_id FROM knowledge_entries WHERE slug = ?", (candidate,)
+        ).fetchone()
+        if not row:
+            return candidate
+        # It's our own current slug — reuse it (re-publish after rename edge case)
+        if existing_entry_id and row["entry_id"] == existing_entry_id:
+            return candidate
+        candidate = f"{base}-{counter}"
+        counter += 1
+
+
+@library_bp.route("/api/entry/<path:entry_id>/publish", methods=["POST"])
+@login_required
+def api_publish_entry(entry_id: str):
+    """Toggle publish/unpublish on a note.
+
+    If the note is currently unpublished, assigns a slug and marks it published.
+    If already published, marks it unpublished (slug is retained but published=0).
+
+    Response:
+    {
+        "status": "published" | "unpublished",
+        "slug": "my-note-slug" | null,
+        "public_url": "https://legate.studio/pub/username/slug" | null
+    }
+    """
+    try:
+        db = get_db()
+
+        entry = db.execute(
+            "SELECT entry_id, title, published, slug FROM knowledge_entries WHERE entry_id = ?",
+            (entry_id,),
+        ).fetchone()
+
+        if not entry:
+            return jsonify({"error": "Entry not found"}), 404
+
+        entry_dict = dict(entry)
+        user = session.get("user", {})
+        username = user.get("username") or user.get("github_login") or "unknown"
+
+        currently_published = bool(entry_dict.get("published"))
+
+        if currently_published:
+            # Unpublish — keep slug but clear published flag
+            db.execute(
+                """
+                UPDATE knowledge_entries
+                SET published = 0, published_at = NULL
+                WHERE entry_id = ?
+                """,
+                (entry_id,),
+            )
+            db.commit()
+            return jsonify({"status": "unpublished", "slug": entry_dict.get("slug"), "public_url": None})
+
+        else:
+            # Publish — generate slug if not already set
+            existing_slug = entry_dict.get("slug")
+            if not existing_slug:
+                slug = _unique_slug(db, entry_dict["title"], entry_id)
+            else:
+                slug = existing_slug
+
+            db.execute(
+                """
+                UPDATE knowledge_entries
+                SET published = 1, slug = ?, published_at = CURRENT_TIMESTAMP
+                WHERE entry_id = ?
+                """,
+                (slug, entry_id),
+            )
+            db.commit()
+
+            public_url = f"https://legate.studio/pub/{username}/{slug}"
+            return jsonify({"status": "published", "slug": slug, "public_url": public_url})
+
+    except Exception as e:
+        logger.error(f"Publish toggle failed for {entry_id}: {e}")
+        return jsonify({"error": str(e)}), 500
