@@ -541,6 +541,9 @@ def create_app():
     def ratelimit_error(error):
         return render_template("error.html", title="Rate Limited", message="Too many requests. Please wait."), 429
 
+    # Register is_feature_available as a Jinja2 global so templates can call it
+    app.jinja_env.globals["is_feature_available"] = is_feature_available
+
     logger.info("Legate Studio application initialized")
     return app
 
@@ -660,10 +663,18 @@ def is_trial_expired(user_id: str) -> bool:
 
 
 def get_effective_tier(user_id: str) -> str:
-    """Get effective tier considering beta status.
+    """Get effective subscription tier for a user.
 
-    Beta users get 'managed' tier free.
-    Returns: 'trial', 'byok', or 'managed'
+    Supported tier strings:
+      'trial'            — free/unsubscribed
+      'byok'             — BYOK ($0.99/mo), unlimited, user provides own keys
+      'managed_lite'     — Managed $5/mo, $4.50 token credits
+      'managed_standard' — Managed $10/mo, $9.00 token credits
+      'managed_plus'     — Managed $20/mo, $18.00 token credits
+
+    Legacy values in the DB are mapped for backward compat:
+      'managed' / 'beta' → 'managed_lite'
+      'beta' flag (is_beta=1) → 'managed_lite'
     """
     from .rag.database import init_db
 
@@ -676,27 +687,36 @@ def get_effective_tier(user_id: str) -> str:
     if not row:
         return "trial"
 
-    # Beta users get managed tier free
-    # Check both is_beta flag AND legacy tier='beta' for backwards compatibility
+    # Beta flag → managed_lite (free managed access for beta testers)
     if row["is_beta"] or row["tier"] == "beta":
-        return "managed"
+        return "managed_lite"
 
-    # Return actual tier
     tier = row["tier"] or "trial"
-    return tier if tier in ("trial", "byok", "managed") else "trial"
+
+    # New granular managed tiers — pass through directly
+    if tier in ("trial", "byok", "managed_lite", "managed_standard", "managed_plus"):
+        return tier
+
+    # Legacy 'managed' → managed_lite for backward compat
+    if tier == "managed":
+        return "managed_lite"
+
+    # Anything else (unknown/corrupt) → trial
+    return "trial"
 
 
 def can_use_platform_keys(user_id: str) -> bool:
-    """Check if user can use platform API keys (managed tier or beta)."""
-    return get_effective_tier(user_id) == "managed"
+    """Check if user can use platform API keys (any managed tier or beta)."""
+    from .rag.usage import is_managed_tier
+    return is_managed_tier(get_effective_tier(user_id))
 
 
 def get_api_key_for_user(user_id: str, provider: str) -> str:
-    """Get API key for user - platform key or their own BYOK key.
+    """Get API key for user — platform key (managed tiers) or their own BYOK key.
 
     Args:
         user_id: User's ID
-        provider: 'anthropic' or 'openai'
+        provider: 'anthropic', 'openai', or 'gemini'
 
     Returns:
         API key string or None if not available
@@ -704,15 +724,16 @@ def get_api_key_for_user(user_id: str, provider: str) -> str:
     import os
 
     from .auth import get_user_api_key
+    from .rag.usage import is_managed_tier
 
     tier = get_effective_tier(user_id)
 
-    if tier == "managed":
-        # Return platform key from environment
+    if is_managed_tier(tier):
+        # All managed tiers use platform keys from environment
         env_key = f"{provider.upper()}_API_KEY"
         return os.environ.get(env_key)
     else:
-        # Return user's BYOK key
+        # BYOK / trial — return user's own stored key (may be None)
         return get_user_api_key(user_id, provider)
 
 
@@ -795,11 +816,100 @@ def library_required(f):
     return decorated_function
 
 
+def beta_gate(feature_name: str):
+    """Decorator to gate a feature behind per-user beta entitlement.
+
+    Access is granted only if the current user has an enabled=1 row in
+    user_feature_access for this feature_name.
+
+    If feature_name is not registered in feature_flags at all, access is
+    DENIED (fail-closed) — unknown features are always gated.
+
+    Usage: @beta_gate("chat")
+    Must be used after @login_required.
+    Stack order: @route → @login_required → @paid_required → @beta_gate(...)
+    """
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if "user" not in session:
+                flash("Please log in to access this page.", "warning")
+                return redirect(url_for("auth.login"))
+
+            user = session["user"]
+            user_id = user.get("user_id")
+
+            # Check per-user entitlement in user_feature_access
+            from legate_studio.rag.database import init_db
+
+            db = init_db()
+            row = db.execute(
+                "SELECT enabled FROM user_feature_access WHERE user_id = ? AND feature_name = ?",
+                (user_id, feature_name),
+            ).fetchone()
+
+            if row and row["enabled"]:
+                return f(*args, **kwargs)
+
+            # No entitlement — deny access
+            if (
+                request.path.startswith("/api/")
+                or request.is_json
+                or request.headers.get("Accept") == "application/json"
+            ):
+                return jsonify(
+                    {
+                        "error": f"The {feature_name} feature is currently in beta. Contact an admin for access.",
+                        "beta_required": True,
+                        "feature": feature_name,
+                    }
+                ), 403
+            else:
+                flash("This feature is currently in beta. Contact an admin for access.", "warning")
+                return redirect(url_for("dashboard.index"))
+
+        decorated_function._beta_feature = feature_name  # tag for introspection
+        return decorated_function
+
+    return decorator
+
+
+def is_feature_available(feature_name: str, user: dict = None) -> bool:
+    """Check if a feature is available to the current user.
+
+    Returns True ONLY if the user has an enabled=1 row in user_feature_access
+    for this feature. No global release flag — access is always per-user.
+
+    Use in Jinja templates: {{ is_feature_available('chat') }}
+    Use in Python: is_feature_available('chat', user_dict)
+    """
+    if user is None:
+        user = session.get("user", {})
+
+    user_id = user.get("user_id")
+    if not user_id:
+        return False
+
+    from legate_studio.rag.database import init_db
+
+    db = init_db()
+    row = db.execute(
+        "SELECT enabled FROM user_feature_access WHERE user_id = ? AND feature_name = ?",
+        (user_id, feature_name),
+    ).fetchone()
+
+    return bool(row and row["enabled"])
+
+
 def copilot_required(f):
     """Decorator to require Copilot access for Chords/Agents features.
 
     Must be used after @login_required. Checks if user has Copilot enabled.
     If not, returns 403 for APIs or redirects to dashboard for pages.
+
+    DEPRECATED: Use @beta_gate("feature_name") instead for new feature gating.
+    Kept for backward compatibility.
     """
 
     @wraps(f)
