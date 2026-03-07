@@ -553,7 +553,7 @@ class EmbeddingService:
         }
 
     def expand_query(self, query: str, max_expansions: int = 5) -> list[str]:
-        """Expand query with synonyms and related terms using Claude.
+        """Expand query with synonyms and related terms using Gemini Flash.
 
         Args:
             query: Original query
@@ -565,33 +565,27 @@ class EmbeddingService:
         import os
 
         try:
-            import anthropic
+            import google.generativeai as genai
         except ImportError:
-            logger.warning("anthropic package not installed, skipping query expansion")
+            logger.warning("google-generativeai package not installed, skipping query expansion")
             return [query]
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             return [query]
 
         try:
-            client = anthropic.Anthropic(api_key=api_key)
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
 
-            response = client.messages.create(
-                model="claude-3-5-haiku-20241022",
-                max_tokens=200,
-                messages=[
-                    {
-                        "role": "user",
-                        ("content"): f"""Generate {max_expansions} alternative search queries for: "{query}"
+            prompt = f"""Generate {max_expansions} alternative search queries for: "{query}"
 
 Return ONLY the alternative queries, one per line.
-Include synonyms, related concepts, and rephrased versions. Be concise.""",
-                    }
-                ],
-            )
+Include synonyms, related concepts, and rephrased versions. Be concise."""
 
-            text = response.content[0].text
+            response = model.generate_content(prompt)
+
+            text = response.text
             expansions = [line.strip() for line in text.strip().split("\n") if line.strip()]
             expansions = expansions[:max_expansions]
 
