@@ -643,6 +643,12 @@ def github_app_callback():
         # Create or update user in database
         user = _get_or_create_user(github_id, github_login, email, name, avatar_url)
 
+        # Provision a random PBKDF2 salt for new users (no-op for existing users).
+        # This ensures new users get a random salt before any encrypted data is written,
+        # rather than triggering the migration path on first encrypt.
+        from .crypto import provision_user_salt
+        provision_user_salt(user["user_id"])
+
         # Store refresh token (encrypted)
         if refresh_token:
             from .crypto import encrypt_for_user

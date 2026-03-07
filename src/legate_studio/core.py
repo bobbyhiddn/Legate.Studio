@@ -237,6 +237,18 @@ def create_app():
         init_chat_db()  # chat.db - chat sessions/messages
         logger.info("All databases initialized (legato.db, agents.db, chat.db)")
 
+    # Startup security check: warn if master encryption key is loaded from DB
+    # (triggers key load and caches it so the warning fires once at startup)
+    from .crypto import is_master_key_from_env
+    if not is_master_key_from_env():
+        logger.warning(
+            "⚠️  STARTUP SECURITY WARNING: Master encryption key is stored in the database. "
+            "The key and the encrypted user data it protects are in the SAME file. "
+            "A database dump would expose all encrypted API keys. "
+            "Set LEGATE_MASTER_KEY environment variable in production. "
+            "Generate a key with: python -m legate_studio.crypto"
+        )
+
     # Initialize Stripe products after DB is ready (no-op if STRIPE_SECRET_KEY not set)
     from .stripe_billing import init_stripe_products_on_startup
 
