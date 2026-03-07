@@ -12,6 +12,7 @@ import threading
 from datetime import datetime
 
 import markdown
+import nh3
 from flask import (
     Blueprint,
     current_app,
@@ -507,7 +508,12 @@ def strip_frontmatter(content: str) -> str:
 
 
 def render_markdown(content: str) -> str:
-    """Render markdown content to HTML, stripping frontmatter."""
+    """Render markdown content to HTML, stripping frontmatter.
+
+    Sanitizes the resulting HTML with nh3 to prevent stored XSS.
+    The template renders this output with |safe, so sanitization here
+    is critical — untrusted content must never reach the template unsanitized.
+    """
     # Remove frontmatter since it's shown in collapsible metadata
     content = strip_frontmatter(content)
 
@@ -526,7 +532,35 @@ def render_markdown(content: str) -> str:
             },
         },
     )
-    return md.convert(content)
+    raw_html = md.convert(content)
+
+    # Sanitize HTML to prevent stored XSS (P0-03).
+    # Allow only safe structural tags; strip script/iframe/event handlers.
+    safe_html = nh3.clean(
+        raw_html,
+        tags={
+            "p", "br", "hr",
+            "h1", "h2", "h3", "h4", "h5", "h6",
+            "ul", "ol", "li",
+            "a", "em", "strong", "blockquote",
+            "code", "pre",
+            "table", "thead", "tbody", "tr", "th", "td",
+            "img",
+            # codehilite output wrappers
+            "div", "span",
+        },
+        attributes={
+            "a": {"href", "title"},
+            "img": {"src", "alt", "title"},
+            "code": {"class"},
+            "pre": {"class"},
+            "div": {"class"},
+            "span": {"class"},
+            "th": {"scope"},
+            "td": {"colspan", "rowspan"},
+        },
+    )
+    return safe_html
 
 
 @library_bp.route("/")

@@ -539,7 +539,9 @@ def update_asset(asset_id: str):
         if not existing:
             return jsonify({"error": "Asset not found"}), 404
 
-        # Build update
+        # Build update — columns are hardcoded strings from the allowlist below,
+        # never derived from user input. The f-string is safe (P3-02).
+        # ALLOWLIST: only "alt_text = ?" and "description = ?" can be appended.
         updates = []
         params = []
 

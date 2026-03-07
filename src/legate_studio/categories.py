@@ -365,7 +365,10 @@ def api_update_category(category_id: int):
             if color and not re.match(r"^#[0-9a-fA-F]{6}$", color):
                 return jsonify({"error": "color must be a valid hex color (e.g., #6366f1)"}), 400
 
-        # Build update query dynamically
+        # Build update query dynamically.
+        # Columns are hardcoded strings from the allowlist below — never derived
+        # from user input — so the f-string interpolation is safe (P3-02).
+        # ALLOWLIST: display_name, description, folder_name, sort_order, color.
         updates = []
         params = []
 

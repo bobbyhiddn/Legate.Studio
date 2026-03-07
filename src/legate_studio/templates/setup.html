@@ -110,19 +110,19 @@
         <h2>Your Plan</h2>
         <div class="tier-badge tier-{{ tier }}">{{ tier|capitalize }}</div>
         <p class="tier-description">
-            {% if tier == 'free' %}
-            Free tier: Use your own API keys for LLM access.
-            {% elif tier == 'byk' %}
-            Bring Your Key: Use your own API keys with full features.
-            {% elif tier == 'managed' %}
+            {% if tier == 'trial' %}
+            Free trial: Explore the platform. Upgrade to unlock full features.
+            {% elif tier == 'byok' %}
+            Bring Your Own Keys: Use your own API keys with full features.
+            {% elif tier in ('managed', 'managed_lite', 'managed_standard', 'managed_plus') %}
             Managed: Full service with metered API usage.
             {% endif %}
         </p>
     </div>
     {% endif %}
 
-    <!-- API Keys (for BYK tier) - only show when configured -->
-    {% if is_configured and tier in ['free', 'byk'] %}
+    <!-- API Keys (for BYOK/trial tier) - only show when configured -->
+    {% if is_configured and tier in ['trial', 'byok'] %}
     <div class="setup-section">
         <h2>API Keys</h2>
         <p>Provide your own API keys for LLM access.</p>
@@ -192,11 +192,7 @@
             {% endif %}
         </div>
         <p class="help-text" style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-secondary);">
-            Chords and Agents currently require a <strong>GitHub Copilot</strong> subscription to function.
-            If you don't have Copilot, agent tasks will not execute.
-        </p>
-        <p class="help-text" style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-tertiary); font-style: italic;">
-            Legate Studio-native agents coming soon.
+            Chords and Agents are currently in beta. Contact us for access.
         </p>
     </div>
     {% endif %}

@@ -612,6 +612,8 @@
 {% block scripts %}
 <!-- Marked.js for markdown rendering -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- DOMPurify for XSS sanitization of marked.js output (P1-04) -->
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <script>
     // Tier passed from Flask — used to decide whether to show credit usage UI
     // Possible values: 'managed_lite', 'managed_standard', 'managed_plus',
@@ -620,11 +622,10 @@
     // True for any platform-managed tier (has credit cap + usage tracking)
     const IS_MANAGED_TIER = CURRENT_TIER.startsWith('managed');
 
-    // Configure marked for safe rendering
+    // Configure marked for markdown rendering
     marked.setOptions({
         breaks: true,
         gfm: true,
-        sanitize: false
     });
 
     const messagesContainer = document.getElementById('chatMessages');
@@ -732,10 +733,11 @@
         const messageDiv = document.createElement('div');
         messageDiv.className = `message message-${role}`;
 
-        // Render markdown for assistant messages, escape for user messages
+        // Render markdown for assistant messages, escape for user messages.
+        // DOMPurify sanitizes marked.parse() output to prevent DOM XSS (P1-04).
         let renderedContent;
         if (role === 'assistant') {
-            renderedContent = marked.parse(content);
+            renderedContent = DOMPurify.sanitize(marked.parse(content));
         } else {
             renderedContent = escapeHtml(content);
         }
@@ -760,7 +762,8 @@
             `;
         }
 
-        messageDiv.innerHTML = html;
+        // Final DOMPurify pass covers the full html string including context titles
+        messageDiv.innerHTML = DOMPurify.sanitize(html);
         messagesContainer.insertBefore(messageDiv, typingIndicator);
         scrollToBottom();
     }

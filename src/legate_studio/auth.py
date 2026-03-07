@@ -685,7 +685,6 @@ def github_app_callback():
             "has_chat": bool(user.get("has_chat", False)),
             "is_beta": bool(user.get("is_beta", False)),
         }
-        session["github_token"] = access_token
         session.permanent = True
 
         # Log the login
@@ -693,8 +692,7 @@ def github_app_callback():
 
         logger.info(
             f"GitHub App user logged in: {github_login}, "
-            f"user_id={user['user_id']}, "
-            f"session_has_token={bool(session.get('github_token'))}"
+            f"user_id={user['user_id']}"
         )
 
         # Trigger user-specific Library sync in background
@@ -939,7 +937,7 @@ def setup_debug():
     debug_info = {
         "user_id": user_id,
         "username": username,
-        "session_has_token": "github_token" in session,
+        "session_has_token": False,  # tokens no longer stored in session (P1-03)
     }
 
     # Check OAuth token in database
@@ -1947,38 +1945,12 @@ def _get_user_oauth_token(user_id: str) -> str | None:
 
     logger.info(f"_get_user_oauth_token called for user_id={user_id}")
 
-    # Try session first
-    oauth_token = session.get("github_token")
-    if oauth_token:
-        logger.info(
-            f"Found OAuth token in session for user {user_id} "
-            f"(len={len(oauth_token)}, "
-            f"prefix={oauth_token[:10] if len(oauth_token) > 10 else 'N/A'}...)"
-        )
+    # NOTE (P1-03): GitHub OAuth tokens are no longer stored in the Flask session
+    # (which uses a client-side signed cookie). Tokens are stored encrypted in the
+    # database only. Reads go through the DB path below — this prevents raw tokens
+    # from being exposed in session cookies.
 
-        # Validate session token is still working
-        import requests
-
-        try:
-            test_resp = requests.get(
-                "https://api.github.com/user",
-                headers={
-                    "Authorization": f"Bearer {oauth_token}",
-                    "Accept": "application/vnd.github+json",
-                },
-                timeout=5,
-            )
-            if test_resp.status_code == 200:
-                return oauth_token
-            else:
-                logger.warning(f"Session token invalid (status {test_resp.status_code}), clearing from session")
-                session.pop("github_token", None)
-                # Fall through to database/refresh logic
-        except Exception as e:
-            logger.warning(f"Failed to validate session token: {e}")
-            # Fall through to database/refresh logic
-
-    logger.info(f"No valid session token, checking database for user {user_id}")
+    logger.info(f"Checking database for OAuth token for user {user_id}")
 
     # Try database
     from .crypto import decrypt_for_user

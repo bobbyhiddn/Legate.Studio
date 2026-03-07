@@ -27,6 +27,8 @@ from flask import (
     url_for,
 )
 
+from .core import limiter
+
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -78,6 +80,7 @@ def admin_required(f):
 
 
 @admin_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute, 20 per hour")
 def login():
     """Admin login page - bootstrap access with username/password."""
     # Already authenticated?

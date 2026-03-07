@@ -21,6 +21,7 @@ from flask import Blueprint, current_app, g, jsonify, render_template, request, 
 
 from .core import beta_gate, library_required, login_required, paid_required
 from .rag.chat_session_manager import get_chat_manager
+from .rag.usage import TOPUP_PRICE_CENTS
 
 logger = logging.getLogger(__name__)
 
@@ -414,8 +415,8 @@ def get_usage():
         "cap_dollars": 9.0,
         "period": "2026-03",
         "percent_used": 1.4,
-        "topup_price_dollars": 5.0,
-        "topup_credits_dollars": 4.5
+        "topup_price_dollars": 2.99,
+        "topup_credits_dollars": 2.69
     }
 
     Response (non-managed / single-tenant):
@@ -438,8 +439,8 @@ def get_usage():
     summary = get_usage_summary(user_id, tier=tier)
     summary["tracked"] = True
     summary["tier"] = tier
-    summary["topup_price_dollars"] = 5.0
-    summary["topup_credits_dollars"] = 4.5
+    summary["topup_price_dollars"] = TOPUP_PRICE_CENTS / 100
+    summary["topup_credits_dollars"] = round(TOPUP_PRICE_CENTS / 100 * 0.9, 2)
     return jsonify(summary)
 
 
@@ -486,10 +487,11 @@ def buy_credits():
     # the client_secret for Stripe.js to complete the payment flow.
     # On payment success, call record_credit_topup() from a Stripe webhook handler.
 
+    from .rag.usage import TOPUP_CREDIT_MICRODOLLARS
     return jsonify({
-        "topup_price_dollars": 2.99,
-        "topup_credits_dollars": 2.69,
-        "topup_credits_microdollars": 2_690_000,
+        "topup_price_dollars": TOPUP_PRICE_CENTS / 100,
+        "topup_credits_dollars": round(TOPUP_PRICE_CENTS / 100 * 0.9, 2),
+        "topup_credits_microdollars": TOPUP_CREDIT_MICRODOLLARS,
         "stub": True,
         "message": (
             "Credit top-ups are coming soon. "
