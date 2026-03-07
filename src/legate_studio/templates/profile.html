@@ -430,6 +430,12 @@
             Legate Studio
         </a>
         <div class="pub-nav-actions">
+            {% if is_own_profile %}
+            <button class="btn-secondary" onclick="openEditProfile()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit Profile
+            </button>
+            {% endif %}
             <a href="https://legate.studio" class="btn-secondary">Open Legate</a>
         </div>
     </nav>
@@ -532,6 +538,179 @@
         </div>
         {% endif %}
     </div>
+
+    {% if is_own_profile %}
+    <!-- Edit Profile Modal -->
+    <div id="editProfileOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;justify-content:center;align-items:center;">
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:1.75rem;width:90%;max-width:480px;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+                <h2 style="font-size:1.125rem;font-weight:700;color:#e6edf3;">Edit Profile</h2>
+                <button onclick="closeEditProfile()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:1.25rem;line-height:1;">&times;</button>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:1rem;">
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:#8b949e;margin-bottom:0.375rem;">Display Name</label>
+                    <input id="ep-display-name" type="text" maxlength="50" placeholder="Your display name"
+                        style="width:100%;padding:0.625rem 0.75rem;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:0.875rem;outline:none;"
+                        value="{{ profile.display_name or '' }}">
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:#8b949e;margin-bottom:0.375rem;">Bio <span style="font-weight:400;">(max 500 chars)</span></label>
+                    <textarea id="ep-bio" maxlength="500" rows="3" placeholder="Tell the world about yourself"
+                        style="width:100%;padding:0.625rem 0.75rem;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:0.875rem;outline:none;resize:vertical;font-family:inherit;">{{ profile.bio or '' }}</textarea>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:#8b949e;margin-bottom:0.375rem;">Accent Color</label>
+                    <div style="display:flex;align-items:center;gap:0.75rem;">
+                        <input id="ep-accent" type="color" value="{{ accent_color|default('#a855f7') }}"
+                            style="width:40px;height:36px;border:1px solid #30363d;border-radius:6px;background:#21262d;cursor:pointer;padding:2px;">
+                        <span id="ep-accent-hex" style="font-size:0.8125rem;color:#8b949e;font-family:monospace;">{{ accent_color|default('#a855f7') }}</span>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:#8b949e;margin-bottom:0.375rem;">Notes Layout</label>
+                    <div style="display:flex;gap:0.5rem;">
+                        <label style="display:flex;align-items:center;gap:0.375rem;cursor:pointer;font-size:0.875rem;color:#e6edf3;">
+                            <input type="radio" name="ep-layout" value="grid" {% if layout_pref == 'grid' %}checked{% endif %}> Grid
+                        </label>
+                        <label style="display:flex;align-items:center;gap:0.375rem;cursor:pointer;font-size:0.875rem;color:#e6edf3;">
+                            <input type="radio" name="ep-layout" value="list" {% if layout_pref == 'list' %}checked{% endif %}> List
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:#8b949e;margin-bottom:0.375rem;">Custom Links <span style="font-weight:400;">(max 3)</span></label>
+                    <div id="ep-links" style="display:flex;flex-direction:column;gap:0.5rem;">
+                        {% for link in custom_links %}
+                        <div class="ep-link-row" style="display:flex;gap:0.5rem;">
+                            <input type="text" placeholder="Label" maxlength="50" value="{{ link.label }}"
+                                style="flex:1;padding:0.5rem;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:0.8125rem;outline:none;">
+                            <input type="url" placeholder="https://..." maxlength="500" value="{{ link.url }}"
+                                style="flex:2;padding:0.5rem;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:0.8125rem;outline:none;">
+                            <button onclick="this.closest('.ep-link-row').remove()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:1.1rem;padding:0 0.25rem;">&times;</button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button id="ep-add-link" onclick="addLinkRow()" style="margin-top:0.5rem;background:none;border:1px dashed #30363d;border-radius:6px;color:#8b949e;font-size:0.8125rem;padding:0.375rem 0.75rem;cursor:pointer;width:100%;">+ Add Link</button>
+                </div>
+            </div>
+
+            <div id="ep-status" style="margin-top:1rem;font-size:0.8125rem;display:none;"></div>
+
+            <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:1.5rem;">
+                <button onclick="closeEditProfile()"
+                    style="padding:0.5rem 1rem;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:0.875rem;cursor:pointer;">Cancel</button>
+                <button id="ep-save-btn" onclick="saveProfile()"
+                    style="padding:0.5rem 1rem;background:var(--accent-color);border:none;border-radius:6px;color:#fff;font-size:0.875rem;font-weight:600;cursor:pointer;">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openEditProfile() {
+            const overlay = document.getElementById('editProfileOverlay');
+            overlay.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeEditProfile() {
+            const overlay = document.getElementById('editProfileOverlay');
+            overlay.style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        document.getElementById('ep-accent').addEventListener('input', function() {
+            document.getElementById('ep-accent-hex').textContent = this.value;
+        });
+
+        function addLinkRow() {
+            const container = document.getElementById('ep-links');
+            const rows = container.querySelectorAll('.ep-link-row');
+            if (rows.length >= 3) return;
+            const row = document.createElement('div');
+            row.className = 'ep-link-row';
+            row.style.cssText = 'display:flex;gap:0.5rem;';
+            row.innerHTML = `
+                <input type="text" placeholder="Label" maxlength="50"
+                    style="flex:1;padding:0.5rem;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:0.8125rem;outline:none;">
+                <input type="url" placeholder="https://..." maxlength="500"
+                    style="flex:2;padding:0.5rem;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:0.8125rem;outline:none;">
+                <button onclick="this.closest('.ep-link-row').remove()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:1.1rem;padding:0 0.25rem;">&times;</button>
+            `;
+            container.appendChild(row);
+            if (container.querySelectorAll('.ep-link-row').length >= 3) {
+                document.getElementById('ep-add-link').style.display = 'none';
+            }
+        }
+
+        // Show/hide add link button based on count
+        document.getElementById('ep-links').addEventListener('DOMNodeRemoved', function() {
+            setTimeout(() => {
+                const count = this.querySelectorAll('.ep-link-row').length;
+                document.getElementById('ep-add-link').style.display = count >= 3 ? 'none' : 'block';
+            }, 10);
+        });
+
+        async function saveProfile() {
+            const btn = document.getElementById('ep-save-btn');
+            const status = document.getElementById('ep-status');
+            btn.disabled = true;
+            btn.textContent = 'Saving…';
+            status.style.display = 'none';
+
+            const layout = document.querySelector('input[name="ep-layout"]:checked')?.value || 'grid';
+            const linkRows = document.querySelectorAll('.ep-link-row');
+            const customLinks = [];
+            linkRows.forEach(row => {
+                const inputs = row.querySelectorAll('input');
+                const label = inputs[0]?.value.trim();
+                const url = inputs[1]?.value.trim();
+                if (label && url) customLinks.push({ label, url });
+            });
+
+            const payload = {
+                display_name: document.getElementById('ep-display-name').value.trim() || null,
+                bio: document.getElementById('ep-bio').value.trim() || null,
+                accent_color: document.getElementById('ep-accent').value,
+                layout_pref: layout,
+                custom_links: customLinks,
+            };
+
+            try {
+                const resp = await fetch('/settings/profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    status.style.cssText = 'margin-top:1rem;font-size:0.8125rem;display:block;color:#3fb950;';
+                    status.textContent = 'Profile saved! Reloading…';
+                    setTimeout(() => location.reload(), 800);
+                } else {
+                    status.style.cssText = 'margin-top:1rem;font-size:0.8125rem;display:block;color:#f85149;';
+                    status.textContent = data.error || 'Save failed.';
+                    btn.disabled = false;
+                    btn.textContent = 'Save';
+                }
+            } catch (e) {
+                status.style.cssText = 'margin-top:1rem;font-size:0.8125rem;display:block;color:#f85149;';
+                status.textContent = 'Network error. Try again.';
+                btn.disabled = false;
+                btn.textContent = 'Save';
+            }
+        }
+
+        document.getElementById('editProfileOverlay').addEventListener('click', function(e) {
+            if (e.target === this) closeEditProfile();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeEditProfile();
+        });
+    </script>
+    {% endif %}
 
     <!-- Footer -->
     <footer class="pub-footer">

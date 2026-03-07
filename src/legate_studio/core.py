@@ -763,6 +763,10 @@ def create_app():
 
         canonical_url = f"https://legate.studio/pub/{username}"
 
+        # Check if the viewer is the profile owner
+        viewer = session.get("user", {})
+        is_own_profile = bool(viewer and viewer.get("username") == username)
+
         return render_template(
             "profile.html",
             profile=profile,
@@ -772,6 +776,7 @@ def create_app():
             accent_color=profile.get("accent_color", "#a855f7"),
             layout_pref=profile.get("layout_pref", "grid"),
             canonical_url=canonical_url,
+            is_own_profile=is_own_profile,
             # OG/SEO
             og_title=f"{profile.get('display_name') or username} — Legate Studio",
             og_description=profile.get("bio") or f"Published notes by {username} on Legate Studio.",
@@ -913,6 +918,7 @@ def create_app():
         accent_color = profile.get("accent_color") or "#a855f7"
         author_display_name = profile.get("display_name") or username
         author_profile_url = f"/pub/{username}"
+        author_avatar = profile.get("avatar_url") or ""
 
         return render_template(
             "published_note.html",
@@ -930,6 +936,7 @@ def create_app():
             accent_color=accent_color,
             author_display_name=author_display_name,
             author_profile_url=author_profile_url,
+            author_avatar=author_avatar,
             # OG / SEO vars
             og_title=note_dict.get("title", "Note"),
             og_description=(note_dict.get("content", "")[:160].replace("\n", " ") if note_dict.get("content") else ""),

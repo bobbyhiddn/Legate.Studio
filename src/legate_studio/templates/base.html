@@ -84,6 +84,11 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
                     Categories
                 </a>
+                <a href="/pub/{{ user.username }}"
+                   class="sidebar-link {% if request.path.startswith('/pub/') %}active{% endif %}">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                    My Profile
+                </a>
             </div>
 
             <div class="sidebar-footer">
@@ -113,6 +118,10 @@
                             Admin
                         </a>
                         {% endif %}
+                        <a href="/pub/{{ user.username }}" class="user-menu-item">
+                            <span class="user-menu-icon">&#128100;</span>
+                            My Profile
+                        </a>
                         <a href="{{ url_for('auth.setup') }}" class="user-menu-item">
                             <span class="user-menu-icon">&#9881;</span>
                             Settings
@@ -207,6 +216,12 @@
                    onclick="closeMobileNav()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
                     Categories
+                </a>
+                <a href="/pub/{{ user.username }}"
+                   class="mobile-nav-link {% if request.path.startswith('/pub/') %}active{% endif %}"
+                   onclick="closeMobileNav()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                    My Profile
                 </a>
 
                 <div class="mobile-nav-divider"></div>
