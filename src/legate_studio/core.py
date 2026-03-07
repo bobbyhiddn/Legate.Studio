@@ -28,10 +28,19 @@ _activity_lock = threading.Lock()
 # Module-level rate limiter — initialized via limiter.init_app(app) inside create_app().
 # Defined at module level so blueprints (e.g. mcp_server.py) can import and
 # decorate routes with @limiter.limit() at module load time before the app exists.
+_rate_limit_storage = os.getenv("REDIS_URL", "memory://")
+if _rate_limit_storage == "memory://":
+    logger.warning(
+        "Rate limiter using in-memory storage — state is NOT shared across workers and "
+        "will be lost on restart. Set REDIS_URL for production deployments."
+    )
+else:
+    logger.info("Rate limiter using Redis storage: %s", _rate_limit_storage)
+
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://",
+    storage_uri=_rate_limit_storage,
 )
 
 
@@ -54,6 +63,10 @@ def _get_or_create_persistent_key(env_var: str, filename: str) -> str:
     On Fly.io, /data is a persistent volume that survives restarts.
     This prevents SECRET_KEY regeneration from invalidating all sessions
     and JWTs on every cold start.
+
+    In multi-tenant production (LEGATO_MODE=multi-tenant), an ephemeral key
+    is a hard error — sessions and JWTs would be invalidated on every restart,
+    breaking all users. Set the env var or ensure /data is a persistent volume.
     """
     key = os.getenv(env_var)
     if key:
@@ -73,8 +86,23 @@ def _get_or_create_persistent_key(env_var: str, filename: str) -> str:
         key_path.parent.mkdir(parents=True, exist_ok=True)
         key_path.write_text(key)
         logger.info(f"Generated and persisted {env_var} to {key_path}")
+        return key
     except OSError:
-        logger.warning(f"Could not persist {env_var} to {key_path} — using ephemeral key")
+        # Could not persist — using ephemeral key
+        is_multi_tenant = os.getenv("LEGATO_MODE") == "multi-tenant"
+        if is_multi_tenant:
+            raise RuntimeError(
+                f"FATAL: Could not persist {env_var} to {key_path} and "
+                f"LEGATO_MODE=multi-tenant. In production, an ephemeral key would "
+                f"invalidate all user sessions and JWTs on every restart. "
+                f"Set {env_var} as an environment variable or mount a persistent "
+                f"volume at /data. Refusing to start with ephemeral key."
+            )
+        logger.error(
+            f"Could not persist {env_var} to {key_path} — using ephemeral key. "
+            f"All sessions and JWTs will be invalidated on restart. "
+            f"Set {env_var} as an environment variable for production."
+        )
     return key
 
 
@@ -474,6 +502,58 @@ def create_app():
                 logger.warning(f"Could not get/refresh OAuth token for user {user_id}")
         except Exception as e:
             logger.error(f"Token refresh check failed: {e}")
+
+    # Enforce trial expiry — block API and HTML access for expired trial users
+    @app.before_request
+    def enforce_trial_expiry():
+        """Block access for users whose free trial has expired.
+
+        Only enforced in multi-tenant mode. Beta users (is_beta=1) are always
+        exempt. Billing, auth, static, and OAuth endpoints are never blocked
+        so users can subscribe or manage their account.
+
+        JSON/API requests → 402 with JSON error.
+        HTML requests → redirect to /auth/setup.
+        """
+        # Only enforce in multi-tenant SaaS mode
+        if app.config.get("LEGATO_MODE") != "multi-tenant":
+            return
+
+        # Skip if not logged in
+        if "user" not in session:
+            return
+
+        # Allow access to auth, billing, OAuth, and static paths
+        exempt_prefixes = ("/auth/", "/billing/", "/static/", "/oauth/", "/health")
+        if any(request.path.startswith(p) for p in exempt_prefixes):
+            return
+
+        user_id = session["user"].get("user_id")
+        if not user_id:
+            return
+
+        # Beta users are always exempt
+        if session["user"].get("is_beta"):
+            return
+
+        try:
+            effective_tier = get_effective_tier(user_id)
+            if effective_tier == "trial" and is_trial_expired(user_id):
+                if (
+                    request.path.startswith("/api/")
+                    or request.is_json
+                    or request.headers.get("Accept") == "application/json"
+                ):
+                    return jsonify({
+                        "error": "Your free trial has expired. Please subscribe to continue.",
+                        "upgrade_url": "/auth/setup",
+                        "trial_expired": True,
+                    }), 402
+                else:
+                    flash("Your free trial has expired. Please subscribe to continue.", "warning")
+                    return redirect(url_for("auth.setup"))
+        except Exception as e:
+            logger.error(f"Trial expiry check failed for user {user_id}: {e}")
 
     # Context processor for templates
     @app.context_processor
