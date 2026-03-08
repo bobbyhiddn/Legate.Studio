@@ -871,6 +871,62 @@ def init_db(db_path: Path | None = None, user_id: str | None = None) -> sqlite3.
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_profiles_user ON user_profiles(user_id)")
 
+    # ============ Shared Libraries Tables ============
+
+    # Shared libraries (multi-user collaborative libraries)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS shared_libraries (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            slug TEXT NOT NULL,
+            owner_user_id TEXT NOT NULL,
+            repo_full_name TEXT,
+            description TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'active',
+            UNIQUE(owner_user_id, slug),
+            FOREIGN KEY (owner_user_id) REFERENCES users(user_id)
+        )
+    """)
+
+    # Membership / invitation records for shared libraries
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS shared_library_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            shared_library_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'collaborator',
+            invited_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            accepted_at DATETIME,
+            status TEXT DEFAULT 'invited',
+            UNIQUE(shared_library_id, user_id),
+            FOREIGN KEY (shared_library_id) REFERENCES shared_libraries(id),
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    """)
+
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_shared_libraries_owner ON shared_libraries(owner_user_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_shared_libraries_status ON shared_libraries(status)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_shared_library_members_library"
+        " ON shared_library_members(shared_library_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_shared_library_members_user"
+        " ON shared_library_members(user_id, status)"
+    )
+
+    # Migrations for shared_libraries (for existing legato.db instances)
+    try:
+        cursor.execute("ALTER TABLE shared_libraries ADD COLUMN description TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     # Multi-tenant indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_github ON users(github_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_login ON users(github_login)")
@@ -998,6 +1054,246 @@ def get_user_categories(conn: sqlite3.Connection, user_id: str = "default") -> l
     ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+# ============ Shared Library DB ============
+
+
+def get_shared_library_db_path(library_id: str) -> Path:
+    """Get path for a shared library's SQLite database.
+
+    Args:
+        library_id: UUID of the shared library
+
+    Returns:
+        Path to the shared library database file (e.g., shared_<uuid>.db)
+    """
+    # Sanitize library_id to prevent path traversal
+    safe_id = "".join(c for c in library_id if c.isalnum() or c in "-_")
+    return get_db_dir() / f"shared_{safe_id}.db"
+
+
+def init_shared_library_db(library_id: str) -> Path:
+    """Initialize the SQLite database for a shared library.
+
+    Creates a per-library database with the same schema as a per-user database
+    (knowledge_entries, user_categories, library_assets, note_links, etc.)
+    plus a drafts table for the collaborative review/merge workflow.
+
+    Args:
+        library_id: UUID of the shared library
+
+    Returns:
+        Path to the created/initialized database file
+    """
+    db_path = get_shared_library_db_path(library_id)
+    conn = get_connection(db_path)
+
+    # Avoid redundant init if already done in this process
+    db_key = str(db_path)
+    with _init_lock:
+        if db_key in _initialized_dbs:
+            conn.close()
+            return db_path
+        _initialized_dbs.add(db_key)
+
+    cursor = conn.cursor()
+
+    # ---- mirror of per-user schema ----
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS knowledge_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entry_id TEXT UNIQUE NOT NULL,
+            title TEXT NOT NULL,
+            category TEXT,
+            content TEXT NOT NULL,
+            source_thread TEXT,
+            source_transcript TEXT,
+            file_path TEXT,
+            needs_chord INTEGER DEFAULT 0,
+            chord_name TEXT,
+            chord_scope TEXT,
+            chord_id TEXT,
+            chord_status TEXT,
+            chord_repo TEXT,
+            domain_tags TEXT,
+            key_phrases TEXT,
+            subfolder TEXT,
+            task_status TEXT,
+            published INTEGER DEFAULT 0,
+            slug TEXT DEFAULT NULL,
+            published_at DATETIME DEFAULT NULL,
+            due_date DATE,
+            content_hash TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL DEFAULT 'default',
+            name TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT,
+            folder_name TEXT NOT NULL,
+            color TEXT DEFAULT '#6366f1',
+            sort_order INTEGER DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, name)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS library_assets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            asset_id TEXT UNIQUE NOT NULL,
+            category TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            mime_type TEXT,
+            file_size INTEGER,
+            alt_text TEXT,
+            description TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS note_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_entry_id TEXT NOT NULL,
+            target_entry_id TEXT NOT NULL,
+            link_type TEXT DEFAULT 'related',
+            description TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT DEFAULT 'mcp-claude',
+            UNIQUE(source_entry_id, target_entry_id, link_type)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS embeddings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entry_id INTEGER NOT NULL,
+            entry_type TEXT NOT NULL DEFAULT 'knowledge',
+            embedding BLOB NOT NULL,
+            vector_version TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(entry_id, entry_type, vector_version)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sync_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            commit_sha TEXT,
+            entries_synced INTEGER DEFAULT 0,
+            status TEXT,
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS processing_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id TEXT UNIQUE NOT NULL,
+            job_type TEXT NOT NULL DEFAULT 'motif',
+            status TEXT NOT NULL DEFAULT 'pending',
+            input_content TEXT NOT NULL,
+            input_format TEXT DEFAULT 'markdown',
+            result_entry_ids TEXT,
+            error_message TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            completed_at DATETIME
+        )
+    """)
+
+    # ---- drafts table (shared library only) ----
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS drafts (
+            id TEXT PRIMARY KEY,
+            author_user_id TEXT,
+            author_login TEXT,
+            target_entry_id TEXT,
+            draft_type TEXT NOT NULL,
+            title TEXT,
+            content TEXT,
+            category TEXT,
+            subfolder TEXT,
+            status TEXT NOT NULL DEFAULT 'draft',
+            feedback TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            submitted_at DATETIME,
+            resolved_at DATETIME
+        )
+    """)
+
+    # ---- indexes ----
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ke_category ON knowledge_entries(category)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ke_entry_id ON knowledge_entries(entry_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ke_content_hash ON knowledge_entries(content_hash)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ke_published ON knowledge_entries(published)")
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_ke_slug ON knowledge_entries(slug) WHERE slug IS NOT NULL"
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_assets_category ON library_assets(category)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_assets_asset_id ON library_assets(asset_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_note_links_source ON note_links(source_entry_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_note_links_target ON note_links(target_entry_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_entry ON embeddings(entry_id, entry_type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_drafts_author ON drafts(author_user_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_drafts_target ON drafts(target_entry_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_categories_user ON user_categories(user_id, is_active)")
+
+    # Seed default categories (shared library uses 'default' user_id key)
+    for name, display_name, description, folder_name, sort_order, color in DEFAULT_CATEGORIES:
+        try:
+            cursor.execute(
+                """
+                INSERT INTO user_categories
+                    (user_id, name, display_name, description, folder_name, sort_order, color)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("default", name, display_name, description, folder_name, sort_order, color),
+            )
+        except sqlite3.IntegrityError:
+            pass  # Already seeded
+
+    conn.commit()
+    conn.close()
+
+    logger.info(f"Shared library database initialized at {db_path}")
+    return db_path
+
+
+def get_shared_library_db(library_id: str) -> sqlite3.Connection:
+    """Get a connection to a shared library's SQLite database.
+
+    Initializes the database if it doesn't exist yet.
+
+    Args:
+        library_id: UUID of the shared library
+
+    Returns:
+        sqlite3.Connection to the shared library database
+    """
+    db_path = get_shared_library_db_path(library_id)
+    if not db_path.exists():
+        init_shared_library_db(library_id)
+    return get_connection(db_path)
 
 
 # ============ Agents DB ============

@@ -1197,3 +1197,75 @@ class LibrarySync:
             self.conn.commit()
             logger.info(f"Created asset: {asset_id} -> {file_path}")
             return "created"
+
+
+# ============ Shared Library Sync ============
+
+
+def sync_shared_library(library_id: str) -> dict:
+    """Sync a shared library's database from its GitHub repository.
+
+    Looks up the shared library record in legato.db, retrieves the owner's
+    installation token, opens the per-library SQLite database, and runs a
+    full GitHub sync on the 'main' branch only (never draft branches).
+
+    Args:
+        library_id: UUID of the shared library to sync
+
+    Returns:
+        Dict with sync statistics from LibrarySync.sync_from_github()
+
+    Raises:
+        ValueError: If the library doesn't exist, has no repo configured,
+                    or the owner has no valid installation token.
+    """
+    from ..auth import get_user_installation_token
+    from .database import get_shared_library_db, init_db
+
+    # Look up the shared library record in the shared legato.db
+    shared_db = init_db()
+    row = shared_db.execute(
+        """
+        SELECT id, name, repo_full_name, owner_user_id
+        FROM shared_libraries
+        WHERE id = ? AND status = 'active'
+        """,
+        (library_id,),
+    ).fetchone()
+
+    if not row:
+        raise ValueError(f"Shared library '{library_id}' not found or is not active")
+
+    repo_full_name = row["repo_full_name"]
+    owner_user_id = row["owner_user_id"]
+
+    if not repo_full_name:
+        raise ValueError(
+            f"Shared library '{library_id}' has no GitHub repository configured"
+        )
+
+    # Get the owner's installation access token
+    token = get_user_installation_token(owner_user_id, "library")
+    if not token:
+        raise ValueError(
+            f"No valid GitHub installation token for owner '{owner_user_id}' — "
+            "owner may need to re-authenticate"
+        )
+
+    # Open (or initialize) the per-library SQLite database
+    lib_conn = get_shared_library_db(library_id)
+
+    try:
+        # Sync from GitHub — always use main branch, never draft branches
+        sync = LibrarySync(lib_conn)
+        stats = sync.sync_from_github(repo=repo_full_name, token=token, branch="main")
+        stats["library_id"] = library_id
+        stats["repo"] = repo_full_name
+        logger.info(
+            f"Shared library sync complete for '{library_id}': "
+            f"{stats.get('entries_created', 0)} created, "
+            f"{stats.get('entries_updated', 0)} updated"
+        )
+        return stats
+    finally:
+        lib_conn.close()

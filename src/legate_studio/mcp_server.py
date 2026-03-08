@@ -914,7 +914,7 @@ TOOLS = [
             "Check consistency between database entries and GitHub files. Identifies notes that "
             "exist in the database but are missing from GitHub (orphaned DB entries) or exist in "
             "GitHub but missing from database. Use this to diagnose sync mismatches before running "
-            "repair_sync_state."
+            "repair_sync_state. Pass library_id to check a shared library instead of your personal library."
         ),
         "inputSchema": {
             "type": "object",
@@ -927,6 +927,13 @@ TOOLS = [
                     "type": "integer",
                     "description": "Maximum number of entries to check (default: 100, max: 500)",
                     "default": 100,
+                },
+                "library_id": {
+                    "type": "string",
+                    "description": (
+                        "Optional: UUID of a shared library to check. "
+                        "Caller must be the library owner. Omit for personal library."
+                    ),
                 },
             },
             "required": [],
@@ -1133,6 +1140,25 @@ TOOLS = [
             "required": ["name", "display_name"],
         },
     },
+    {
+        "name": "sync_shared_library",
+        "description": (
+            "Sync a shared library's database from its GitHub repository. "
+            "Only the library owner can trigger this. Pulls the latest content "
+            "from the 'main' branch and updates the library's local database. "
+            "Returns sync statistics (entries created, updated, errors)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "library_id": {
+                    "type": "string",
+                    "description": "UUID of the shared library to sync",
+                },
+            },
+            "required": ["library_id"],
+        },
+    },
 ]
 
 
@@ -1182,6 +1208,7 @@ def handle_tool_call(params: dict) -> dict:
         "upload_asset": tool_upload_asset,
         "upload_markdown_as_note": tool_upload_markdown_as_note,
         "create_category": tool_create_category,
+        "sync_shared_library": tool_sync_shared_library,
     }
 
     handler = tool_handlers.get(name)
@@ -4398,24 +4425,51 @@ def tool_verify_sync_state(args: dict) -> dict:
 
     Identifies notes that exist in the database but are missing from GitHub
     (orphaned DB entries) which can cause update/rename operations to fail.
+
+    When library_id is provided, checks the shared library database instead of
+    the caller's personal library. The caller must be the owner.
     """
     from .rag.github_service import file_exists
 
     category = args.get("category", "").strip().lower() if args.get("category") else None
     limit = min(int(args.get("limit", 100)), 500)
+    library_id = args.get("library_id", "").strip() if args.get("library_id") else None
 
-    db = get_db()
     user_id = g.mcp_user.get("user_id") if hasattr(g, "mcp_user") else None
 
-    # Get user's installation token
     from .auth import get_user_installation_token
-    from .core import get_user_library_repo
 
-    token = get_user_installation_token(user_id, "library") if user_id else None
+    if library_id:
+        # Shared library mode — use the shared library's DB and owner's token
+        from .rag.database import get_shared_library_db, init_db as init_shared_db
+
+        shared_meta = init_shared_db()
+        row = shared_meta.execute(
+            "SELECT owner_user_id, repo_full_name FROM shared_libraries WHERE id = ? AND status = 'active'",
+            (library_id,),
+        ).fetchone()
+        if not row:
+            return {"error": f"Shared library '{library_id}' not found"}
+        if row["owner_user_id"] != user_id:
+            return {"error": "Only the library owner can verify sync state for a shared library"}
+        repo = row["repo_full_name"]
+        if not repo:
+            return {"error": "Shared library has no GitHub repository configured"}
+        token = get_user_installation_token(row["owner_user_id"], "library")
+        db = get_shared_library_db(library_id)
+    else:
+        # Personal library mode (original behaviour)
+        from .core import get_user_library_repo
+
+        db = get_db()
+        token = get_user_installation_token(user_id, "library") if user_id else None
+        repo = get_user_library_repo(user_id)
+
     if not token:
         return {"error": "GitHub authorization required. Please re-authenticate."}
 
-    repo = get_user_library_repo(user_id)
+    if not repo:
+        return {"error": "No GitHub repository configured for this library."}
 
     # Get entries from database
     if category:
@@ -4664,6 +4718,46 @@ def tool_repair_sync_state(args: dict) -> dict:
         result["message"] = f"Successfully repaired {len(repaired)} entries by creating missing GitHub files."
 
     return result
+
+
+def tool_sync_shared_library(args: dict) -> dict:
+    """Sync a shared library's database from its GitHub repository.
+
+    Only callable by the library owner. Pulls the latest content from the
+    'main' branch and updates the per-library SQLite database.
+    """
+    from .rag.database import init_db
+    from .rag.library_sync import sync_shared_library
+
+    library_id = args.get("library_id", "").strip()
+    if not library_id:
+        return {"error": "library_id is required"}
+
+    user_id = g.mcp_user.get("user_id") if hasattr(g, "mcp_user") else None
+    if not user_id:
+        return {"error": "Authentication required"}
+
+    # Verify caller is the library owner
+    shared_db = init_db()
+    row = shared_db.execute(
+        "SELECT owner_user_id FROM shared_libraries WHERE id = ? AND status = 'active'",
+        (library_id,),
+    ).fetchone()
+
+    if not row:
+        return {"error": f"Shared library '{library_id}' not found"}
+
+    if row["owner_user_id"] != user_id:
+        return {"error": "Only the library owner can trigger a sync"}
+
+    try:
+        stats = sync_shared_library(library_id)
+        return stats
+    except ValueError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        logger.error(f"sync_shared_library failed for {library_id}: {e}", exc_info=True)
+        return {"error": f"Sync failed: {str(e)}"}
 
 
 # ============ Asset Tools ============
