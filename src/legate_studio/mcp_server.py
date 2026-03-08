@@ -7010,6 +7010,905 @@ def handle_resource_read(params: dict) -> dict:
     raise MCPError(-32602, f"Unknown resource: {uri}")
 
 
+
+# ============ Draft & Merge Workflow Tool Implementations ============
+
+
+def _get_shared_library_meta(library_id: str) -> dict | None:
+    """Fetch owner_user_id and repo_full_name for a shared library from legato.db.
+
+    Returns a dict with keys 'owner_user_id' and 'repo_full_name', or None if not found.
+    """
+    from .rag.database import init_db as init_shared_db
+
+    shared_meta = init_shared_db()
+    row = shared_meta.execute(
+        "SELECT owner_user_id, repo_full_name FROM shared_libraries WHERE id = ? AND status = 'active'",
+        (library_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def tool_create_draft(args: dict) -> dict:
+    """Create a draft for a shared library (collaborator or owner)."""
+    import uuid
+
+    library_id = args.get("library_id", "").strip()
+    draft_type = args.get("draft_type", "").strip()
+    title = args.get("title", "").strip() if args.get("title") else None
+    content = args.get("content", "").strip() if args.get("content") else None
+    category = args.get("category", "").lower().strip() if args.get("category") else None
+    subfolder = args.get("subfolder", "").strip() if args.get("subfolder") else None
+    target_entry_id = args.get("target_entry_id", "").strip() if args.get("target_entry_id") else None
+
+    if not library_id:
+        return {"error": "library_id is required"}
+
+    valid_draft_types = {"new_note", "edit", "delete"}
+    if draft_type not in valid_draft_types:
+        return {"error": f"draft_type must be one of: {', '.join(sorted(valid_draft_types))}"}
+
+    # Get library db and verify caller is a member (not using check_write_permission --
+    # drafts are explicitly the collaborator workflow, both collaborators and owners can draft)
+    try:
+        db, role = get_library_db(args)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    user_id = g.mcp_user.get("user_id") if hasattr(g, "mcp_user") else None
+    author_login = g.mcp_user.get("sub") if hasattr(g, "mcp_user") else None
+
+    if not user_id:
+        return {"error": "Authentication required"}
+
+    # Validate fields per draft_type
+    if draft_type == "new_note":
+        if not title:
+            return {"error": "title is required for new_note drafts"}
+        if not content:
+            return {"error": "content is required for new_note drafts"}
+        if not category:
+            return {"error": "category is required for new_note drafts"}
+        if subfolder and ("/" in subfolder or "\\" in subfolder):
+            return {"error": "subfolder cannot contain slashes"}
+    elif draft_type == "edit":
+        if not target_entry_id:
+            return {"error": "target_entry_id is required for edit drafts"}
+        if not content:
+            return {"error": "content is required for edit drafts"}
+        # Verify target note exists
+        target = db.execute(
+            "SELECT entry_id FROM knowledge_entries WHERE entry_id = ?", (target_entry_id,)
+        ).fetchone()
+        if not target:
+            return {"error": f"Target note not found: {target_entry_id}"}
+    elif draft_type == "delete":
+        if not target_entry_id:
+            return {"error": "target_entry_id is required for delete drafts"}
+        # Verify target note exists
+        target = db.execute(
+            "SELECT entry_id FROM knowledge_entries WHERE entry_id = ?", (target_entry_id,)
+        ).fetchone()
+        if not target:
+            return {"error": f"Target note not found: {target_entry_id}"}
+
+    # One active draft per author per target note (for edit/delete drafts)
+    if target_entry_id:
+        existing = db.execute(
+            """
+            SELECT id FROM drafts
+            WHERE author_user_id = ? AND target_entry_id = ? AND status IN ('draft', 'submitted')
+            """,
+            (user_id, target_entry_id),
+        ).fetchone()
+        if existing:
+            return {
+                "error": (
+                    f"You already have an active draft for note '{target_entry_id}' "
+                    f"(draft_id: {existing['id']}). Submit or wait for resolution before creating a new one."
+                )
+            }
+
+    draft_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat() + "Z"
+
+    try:
+        db.execute(
+            """
+            INSERT INTO drafts
+                (id, author_user_id, author_login, target_entry_id, draft_type,
+                 title, content, category, subfolder, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+            """,
+            (
+                draft_id,
+                user_id,
+                author_login,
+                target_entry_id,
+                draft_type,
+                title,
+                content,
+                category,
+                subfolder,
+                now,
+                now,
+            ),
+        )
+        commit_and_checkpoint(db)
+    except Exception as e:
+        logger.error(f"Failed to create draft: {e}")
+        return {"error": f"Failed to create draft: {str(e)}"}
+
+    logger.info(f"Draft created: {draft_id} by {author_login} ({draft_type}) in library {library_id}")
+
+    result = {
+        "success": True,
+        "draft_id": draft_id,
+        "draft_type": draft_type,
+        "status": "draft",
+        "author": author_login,
+        "created_at": now,
+        "message": "Draft created. Use submit_draft to submit it for owner review.",
+    }
+    if title:
+        result["title"] = title
+    if target_entry_id:
+        result["target_entry_id"] = target_entry_id
+    if category:
+        result["category"] = category
+
+    return result
+
+
+def tool_submit_draft(args: dict) -> dict:
+    """Submit a draft for owner review (author only)."""
+    library_id = args.get("library_id", "").strip()
+    draft_id = args.get("draft_id", "").strip()
+
+    if not library_id:
+        return {"error": "library_id is required"}
+    if not draft_id:
+        return {"error": "draft_id is required"}
+
+    try:
+        db, _role = get_library_db(args)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    user_id = g.mcp_user.get("user_id") if hasattr(g, "mcp_user") else None
+    if not user_id:
+        return {"error": "Authentication required"}
+
+    draft = db.execute(
+        """
+        SELECT id, author_user_id, draft_type, title, target_entry_id, status
+        FROM drafts WHERE id = ?
+        """,
+        (draft_id,),
+    ).fetchone()
+
+    if not draft:
+        return {"error": f"Draft not found: {draft_id}"}
+
+    # Only the author can submit
+    if draft["author_user_id"] != user_id:
+        return {"error": "Only the draft's author can submit it"}
+
+    if draft["status"] != "draft":
+        return {
+            "error": (
+                f"Draft cannot be submitted: current status is '{draft['status']}'. "
+                "Only 'draft' status can be submitted."
+            )
+        }
+
+    now = datetime.utcnow().isoformat() + "Z"
+
+    try:
+        db.execute(
+            """
+            UPDATE drafts
+            SET status = 'submitted', submitted_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (now, now, draft_id),
+        )
+        commit_and_checkpoint(db)
+    except Exception as e:
+        logger.error(f"Failed to submit draft {draft_id}: {e}")
+        return {"error": f"Failed to submit draft: {str(e)}"}
+
+    logger.info(f"Draft submitted: {draft_id} in library {library_id}")
+
+    return {
+        "success": True,
+        "draft_id": draft_id,
+        "status": "submitted",
+        "submitted_at": now,
+        "message": "Draft submitted for owner review. The library owner will review and merge or reject it.",
+    }
+
+
+def tool_list_drafts(args: dict) -> dict:
+    """List drafts for a shared library. Owners see all submitted; collaborators see their own."""
+    library_id = args.get("library_id", "").strip()
+    status_filter = args.get("status", "").strip() if args.get("status") else None
+    author_filter = args.get("author", "").strip() if args.get("author") else None
+
+    if not library_id:
+        return {"error": "library_id is required"}
+
+    valid_statuses = {"draft", "submitted", "merged", "rejected"}
+    if status_filter and status_filter not in valid_statuses:
+        return {"error": f"status must be one of: {', '.join(sorted(valid_statuses))}"}
+
+    try:
+        db, role = get_library_db(args)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    user_id = g.mcp_user.get("user_id") if hasattr(g, "mcp_user") else None
+    if not user_id:
+        return {"error": "Authentication required"}
+
+    # Build query -- owners see all drafts (default: submitted); collaborators see only their own
+    sql = """
+        SELECT id, author_user_id, author_login, target_entry_id, draft_type,
+               title, category, subfolder, status, created_at, updated_at,
+               submitted_at, resolved_at
+        FROM drafts
+        WHERE 1=1
+    """
+    params = []
+
+    if role == "owner":
+        # Default for owners: show submitted drafts pending review
+        if status_filter:
+            sql += " AND status = ?"
+            params.append(status_filter)
+        else:
+            sql += " AND status = 'submitted'"
+        if author_filter:
+            sql += " AND author_login = ?"
+            params.append(author_filter)
+    else:
+        # Collaborators only see their own drafts
+        sql += " AND author_user_id = ?"
+        params.append(user_id)
+        if status_filter:
+            sql += " AND status = ?"
+            params.append(status_filter)
+        if author_filter and author_filter != g.mcp_user.get("sub"):
+            return {"error": "Collaborators can only view their own drafts"}
+
+    sql += (
+        " ORDER BY CASE status WHEN 'submitted' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END,"
+        " updated_at DESC"
+    )
+
+    rows = db.execute(sql, params).fetchall()
+
+    drafts = []
+    for r in rows:
+        d = {
+            "draft_id": r["id"],
+            "draft_type": r["draft_type"],
+            "status": r["status"],
+            "author": r["author_login"],
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
+        }
+        if r["title"]:
+            d["title"] = r["title"]
+        if r["target_entry_id"]:
+            d["target_entry_id"] = r["target_entry_id"]
+        if r["category"]:
+            d["category"] = r["category"]
+        if r["subfolder"]:
+            d["subfolder"] = r["subfolder"]
+        if r["submitted_at"]:
+            d["submitted_at"] = r["submitted_at"]
+        if r["resolved_at"]:
+            d["resolved_at"] = r["resolved_at"]
+        drafts.append(d)
+
+    return {
+        "drafts": drafts,
+        "count": len(drafts),
+        "viewer_role": role,
+        "filters_applied": {
+            "status": status_filter or ("submitted" if role == "owner" else None),
+            "author": author_filter,
+        },
+    }
+
+
+def tool_review_draft(args: dict) -> dict:
+    """Review a specific draft. Shows content + original note for edit diffs. Owner + author only."""
+    library_id = args.get("library_id", "").strip()
+    draft_id = args.get("draft_id", "").strip()
+
+    if not library_id:
+        return {"error": "library_id is required"}
+    if not draft_id:
+        return {"error": "draft_id is required"}
+
+    try:
+        db, role = get_library_db(args)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    user_id = g.mcp_user.get("user_id") if hasattr(g, "mcp_user") else None
+    if not user_id:
+        return {"error": "Authentication required"}
+
+    draft = db.execute(
+        """
+        SELECT id, author_user_id, author_login, target_entry_id, draft_type,
+               title, content, category, subfolder, status, feedback,
+               created_at, updated_at, submitted_at, resolved_at
+        FROM drafts WHERE id = ?
+        """,
+        (draft_id,),
+    ).fetchone()
+
+    if not draft:
+        return {"error": f"Draft not found: {draft_id}"}
+
+    # Access control: owner or the draft's author
+    if role != "owner" and draft["author_user_id"] != user_id:
+        return {"error": "Access denied: only the library owner or draft author can review this draft"}
+
+    result = {
+        "draft_id": draft["id"],
+        "draft_type": draft["draft_type"],
+        "status": draft["status"],
+        "author": draft["author_login"],
+        "created_at": draft["created_at"],
+        "updated_at": draft["updated_at"],
+    }
+
+    if draft["title"]:
+        result["proposed_title"] = draft["title"]
+    if draft["content"]:
+        result["proposed_content"] = draft["content"]
+    if draft["category"]:
+        result["proposed_category"] = draft["category"]
+    if draft["subfolder"]:
+        result["proposed_subfolder"] = draft["subfolder"]
+    if draft["submitted_at"]:
+        result["submitted_at"] = draft["submitted_at"]
+    if draft["resolved_at"]:
+        result["resolved_at"] = draft["resolved_at"]
+    if draft["feedback"]:
+        result["feedback"] = draft["feedback"]
+
+    # For edit/delete drafts, include the original note for comparison
+    if draft["target_entry_id"]:
+        result["target_entry_id"] = draft["target_entry_id"]
+        original = db.execute(
+            """
+            SELECT entry_id, title, category, content, file_path, updated_at
+            FROM knowledge_entries WHERE entry_id = ?
+            """,
+            (draft["target_entry_id"],),
+        ).fetchone()
+
+        if original:
+            result["original_note"] = {
+                "entry_id": original["entry_id"],
+                "title": original["title"],
+                "category": original["category"],
+                "content": original["content"],
+                "file_path": original["file_path"],
+                "updated_at": original["updated_at"],
+            }
+
+            # Simple diff summary for edit drafts
+            if draft["draft_type"] == "edit" and draft["content"]:
+                orig_lines = (original["content"] or "").splitlines()
+                new_lines = (draft["content"] or "").splitlines()
+                lines_added = len([ln for ln in new_lines if ln not in orig_lines])
+                lines_removed = len([ln for ln in orig_lines if ln not in new_lines])
+                result["diff_summary"] = {
+                    "original_lines": len(orig_lines),
+                    "proposed_lines": len(new_lines),
+                    "lines_added_estimate": lines_added,
+                    "lines_removed_estimate": lines_removed,
+                    "note": (
+                        "Rough estimate -- compare proposed_content vs original_note.content for exact diff."
+                    ),
+                }
+
+            # Conflict hint
+            if draft["created_at"] and original["updated_at"]:
+                if original["updated_at"] > draft["created_at"]:
+                    result["conflict_warning"] = (
+                        f"The target note was modified after this draft was created "
+                        f"(note updated_at: {original['updated_at']}, "
+                        f"draft created_at: {draft['created_at']}). "
+                        "Use merge_draft with force=true to override."
+                    )
+        else:
+            result["original_note"] = None
+            result["original_note_warning"] = "Target note no longer exists in the library"
+
+    return result
+
+
+def tool_merge_draft(args: dict) -> dict:
+    """Merge a submitted draft into the shared library. OWNER ONLY."""
+    from .rag.database import get_user_categories
+    from .rag.github_service import commit_file, create_file, delete_file, get_file_content
+
+    library_id = args.get("library_id", "").strip()
+    draft_id = args.get("draft_id", "").strip()
+    force = args.get("force", False)
+
+    if not library_id:
+        return {"error": "library_id is required"}
+    if not draft_id:
+        return {"error": "draft_id is required"}
+
+    try:
+        db, role = get_library_db(args)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    user_id = g.mcp_user.get("user_id") if hasattr(g, "mcp_user") else None
+    if not user_id:
+        return {"error": "Authentication required"}
+
+    if role != "owner":
+        return {"error": "Only the library owner can merge drafts"}
+
+    draft = db.execute(
+        """
+        SELECT id, author_user_id, author_login, target_entry_id, draft_type,
+               title, content, category, subfolder, status, created_at
+        FROM drafts WHERE id = ?
+        """,
+        (draft_id,),
+    ).fetchone()
+
+    if not draft:
+        return {"error": f"Draft not found: {draft_id}"}
+
+    if draft["status"] != "submitted":
+        return {
+            "error": (
+                f"Draft cannot be merged: current status is '{draft['status']}'. "
+                "Only 'submitted' drafts can be merged."
+            )
+        }
+
+    # Look up shared library repo + get owner token
+    lib_meta = _get_shared_library_meta(library_id)
+    if not lib_meta:
+        return {"error": f"Shared library '{library_id}' not found"}
+
+    repo = lib_meta.get("repo_full_name")
+    if not repo:
+        return {"error": "Shared library has no GitHub repository configured"}
+
+    from .auth import get_user_installation_token
+
+    token = get_user_installation_token(lib_meta["owner_user_id"], "library")
+    if not token:
+        return {"error": "GitHub authorization required for library owner. Please re-authenticate."}
+
+    now = datetime.utcnow().isoformat() + "Z"
+
+    # ── new_note ─────────────────────────────────────────────────────────────
+    if draft["draft_type"] == "new_note":
+        title = draft["title"]
+        content = draft["content"]
+        category = draft["category"]
+        subfolder = draft["subfolder"]
+
+        if not title or not content or not category:
+            return {"error": "Draft is missing required fields: title, content, and category"}
+
+        categories = get_user_categories(db, "default")
+        valid_categories = {c["name"] for c in categories}
+        category_folders = {c["name"]: c["folder_name"] for c in categories}
+
+        if category not in valid_categories:
+            return {
+                "error": (
+                    f"Draft category '{category}' is not valid. "
+                    f"Must be one of: {', '.join(sorted(valid_categories))}"
+                )
+            }
+
+        # Compute IDs following tool_create_note pattern exactly
+        content_hash = compute_content_hash(content)
+        slug = generate_slug(title)
+        entry_id = generate_entry_id(category, title)
+
+        collision = db.execute(
+            "SELECT entry_id FROM knowledge_entries WHERE entry_id = ?", (entry_id,)
+        ).fetchone()
+        if collision:
+            entry_id = generate_entry_id(category, title, content_hash)
+
+        date_str = datetime.utcnow().strftime("%Y-%m-%d")
+        folder = category_folders.get(category, category)
+        if subfolder:
+            file_path = f"{folder}/{subfolder}/{date_str}-{slug}.md"
+        else:
+            file_path = f"{folder}/{date_str}-{slug}.md"
+
+        timestamp = datetime.utcnow().isoformat() + "Z"
+        frontmatter_lines = [
+            "---",
+            f"id: {entry_id}",
+            f'title: "{title}"',
+            f"category: {category}",
+            f"created: {timestamp}",
+            f"content_hash: {content_hash}",
+            "source: mcp-draft",
+            f"draft_id: {draft_id}",
+            f"drafted_by: {draft['author_login']}",
+            "domain_tags: []",
+            "key_phrases: []",
+        ]
+        if subfolder:
+            frontmatter_lines.append(f"subfolder: {subfolder}")
+        frontmatter_lines.append("---")
+        frontmatter_lines.append("")
+        full_content = "\n".join(frontmatter_lines) + content
+
+        try:
+            cursor = db.execute(
+                """
+                INSERT INTO knowledge_entries
+                    (entry_id, title, category, content, file_path, source_transcript,
+                     content_hash, subfolder, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 'mcp-draft', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                RETURNING id
+                """,
+                (entry_id, title, category, content, file_path, content_hash, subfolder),
+            )
+            row = cursor.fetchone()
+            entry_db_id = row[0]
+
+            try:
+                create_file(
+                    repo=repo,
+                    path=file_path,
+                    content=full_content,
+                    message=(
+                        f"Merge draft: {title} "
+                        f"(draft/{draft_id[:8]}, by {draft['author_login']})"
+                    ),
+                    token=token,
+                )
+            except Exception as github_err:
+                db.rollback()
+                logger.error(f"GitHub create failed for merged draft {draft_id}: {github_err}")
+                return {"error": f"Failed to create file in GitHub: {str(github_err)}"}
+
+            commit_and_checkpoint(db)
+            db.execute(
+                "UPDATE drafts SET status = 'merged', resolved_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, draft_id),
+            )
+            commit_and_checkpoint(db)
+
+        except Exception as db_err:
+            logger.error(f"Database insert failed merging draft {draft_id}: {db_err}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            return {"error": f"Failed to create note in database: {str(db_err)}"}
+
+        _generate_embedding_for_entry(entry_db_id, entry_id, content)
+
+        logger.info(f"Draft {draft_id} merged as new note {entry_id} in library {library_id}")
+
+        return {
+            "success": True,
+            "draft_id": draft_id,
+            "action": "new_note_created",
+            "entry_id": entry_id,
+            "title": title,
+            "file_path": file_path,
+            "merged_at": now,
+            "drafted_by": draft["author_login"],
+        }
+
+    # ── edit ─────────────────────────────────────────────────────────────────
+    elif draft["draft_type"] == "edit":
+        target_entry_id = draft["target_entry_id"]
+        new_content = draft["content"]
+
+        if not target_entry_id:
+            return {"error": "Draft is missing target_entry_id"}
+        if not new_content:
+            return {"error": "Draft is missing content"}
+
+        original = db.execute(
+            """
+            SELECT id, entry_id, title, category, content, file_path, updated_at
+            FROM knowledge_entries WHERE entry_id = ?
+            """,
+            (target_entry_id,),
+        ).fetchone()
+
+        if not original:
+            return {"error": f"Target note not found: {target_entry_id}"}
+
+        # Conflict check
+        if not force and original["updated_at"] and draft["created_at"]:
+            if original["updated_at"] > draft["created_at"]:
+                return {
+                    "conflict": True,
+                    "error": (
+                        f"Conflict detected: the target note '{target_entry_id}' was modified "
+                        f"after this draft was created "
+                        f"(note updated_at: {original['updated_at']}, "
+                        f"draft created_at: {draft['created_at']}). "
+                        "Use force=true to merge anyway."
+                    ),
+                    "note_updated_at": original["updated_at"],
+                    "draft_created_at": draft["created_at"],
+                }
+
+        file_path = original["file_path"]
+        title = original["title"]
+        category = original["category"]
+        new_content_hash = compute_content_hash(new_content)
+
+        try:
+            current_github = get_file_content(repo, file_path, token)
+            if current_github and current_github.startswith("---"):
+                parts = current_github.split("---", 2)
+                if len(parts) >= 3:
+                    fm_lines = parts[1].strip().split("\n")
+                    updated_fm_lines = []
+                    has_content_hash = False
+                    for line in fm_lines:
+                        if line.startswith("content_hash:"):
+                            updated_fm_lines.append(f"content_hash: {new_content_hash}")
+                            has_content_hash = True
+                        else:
+                            updated_fm_lines.append(line)
+                    if not has_content_hash:
+                        updated_fm_lines.append(f"content_hash: {new_content_hash}")
+                    updated_fm_lines.append(f"merged_draft_id: {draft_id}")
+                    updated_fm_lines.append(f"merged_from: {draft['author_login']}")
+                    full_content = "---\n" + "\n".join(updated_fm_lines) + "\n---\n\n" + new_content
+                else:
+                    full_content = new_content
+            else:
+                full_content = (
+                    "---\nid: " + target_entry_id + "\ntitle: \"" + title + "\"\ncategory: " + category + "\n"
+                    "content_hash: " + new_content_hash + "\nmerged_draft_id: " + draft_id + "\n"
+                    "merged_from: " + draft["author_login"] + "\n---\n\n" + new_content
+                )
+
+            commit_file(
+                repo=repo,
+                path=file_path,
+                content=full_content,
+                message=(
+                    f"Merge edit draft for '{title}' "
+                    f"(draft/{draft_id[:8]}, by {draft['author_login']})"
+                ),
+                token=token,
+            )
+
+        except Exception as github_err:
+            logger.error(f"GitHub commit failed for edit draft {draft_id}: {github_err}")
+            return {"error": f"Failed to update file in GitHub: {str(github_err)}"}
+
+        try:
+            db.execute(
+                """
+                UPDATE knowledge_entries
+                SET content = ?, content_hash = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE entry_id = ?
+                """,
+                (new_content, new_content_hash, target_entry_id),
+            )
+            db.execute(
+                "UPDATE drafts SET status = 'merged', resolved_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, draft_id),
+            )
+            commit_and_checkpoint(db)
+        except Exception as db_err:
+            logger.error(f"DB update failed after GitHub commit for draft {draft_id}: {db_err}")
+            return {
+                "error": (
+                    f"GitHub was updated but DB update failed: {str(db_err)}. "
+                    "Run sync_shared_library to repair."
+                )
+            }
+
+        _generate_embedding_for_entry(original["id"], target_entry_id, new_content)
+
+        logger.info(f"Draft {draft_id} merged as edit to {target_entry_id} in library {library_id}")
+
+        return {
+            "success": True,
+            "draft_id": draft_id,
+            "action": "note_updated",
+            "entry_id": target_entry_id,
+            "title": title,
+            "merged_at": now,
+            "drafted_by": draft["author_login"],
+            "forced": force,
+        }
+
+    # ── delete ────────────────────────────────────────────────────────────────
+    elif draft["draft_type"] == "delete":
+        target_entry_id = draft["target_entry_id"]
+
+        if not target_entry_id:
+            return {"error": "Draft is missing target_entry_id"}
+
+        original = db.execute(
+            """
+            SELECT id, entry_id, title, file_path, updated_at
+            FROM knowledge_entries WHERE entry_id = ?
+            """,
+            (target_entry_id,),
+        ).fetchone()
+
+        if not original:
+            return {"error": f"Target note not found: {target_entry_id}"}
+
+        # Conflict check
+        if not force and original["updated_at"] and draft["created_at"]:
+            if original["updated_at"] > draft["created_at"]:
+                return {
+                    "conflict": True,
+                    "error": (
+                        f"Conflict detected: the target note '{target_entry_id}' was modified "
+                        f"after this draft was created. Use force=true to delete anyway."
+                    ),
+                    "note_updated_at": original["updated_at"],
+                    "draft_created_at": draft["created_at"],
+                }
+
+        file_path = original["file_path"]
+        title = original["title"]
+
+        try:
+            if file_path:
+                try:
+                    delete_file(
+                        repo=repo,
+                        path=file_path,
+                        message=(
+                            f"Merge delete draft for '{title}' "
+                            f"(draft/{draft_id[:8]}, by {draft['author_login']})"
+                        ),
+                        token=token,
+                    )
+                except Exception as gh_err:
+                    # File may already be gone -- log and continue with DB deletion
+                    logger.warning(
+                        f"Could not delete {file_path} from GitHub (may not exist): {gh_err}"
+                    )
+        except Exception as e:
+            logger.error(f"GitHub delete failed for draft {draft_id}: {e}")
+            return {"error": f"Failed to delete file in GitHub: {str(e)}"}
+
+        try:
+            db.execute("DELETE FROM knowledge_entries WHERE entry_id = ?", (target_entry_id,))
+            db.execute(
+                "DELETE FROM note_links WHERE source_entry_id = ? OR target_entry_id = ?",
+                (target_entry_id, target_entry_id),
+            )
+            db.execute("DELETE FROM embeddings WHERE entry_id = ?", (original["id"],))
+            db.execute(
+                "UPDATE drafts SET status = 'merged', resolved_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, draft_id),
+            )
+            commit_and_checkpoint(db)
+        except Exception as db_err:
+            logger.error(f"DB delete failed for draft {draft_id}: {db_err}")
+            return {"error": f"Failed to delete note from database: {str(db_err)}"}
+
+        logger.info(f"Draft {draft_id} merged as delete of {target_entry_id} in library {library_id}")
+
+        return {
+            "success": True,
+            "draft_id": draft_id,
+            "action": "note_deleted",
+            "deleted_entry_id": target_entry_id,
+            "title": title,
+            "merged_at": now,
+            "drafted_by": draft["author_login"],
+            "forced": force,
+        }
+
+    else:
+        return {"error": f"Unknown draft_type: {draft['draft_type']}"}
+
+
+def tool_reject_draft(args: dict) -> dict:
+    """Reject a draft with optional feedback. OWNER ONLY."""
+    library_id = args.get("library_id", "").strip()
+    draft_id = args.get("draft_id", "").strip()
+    feedback = args.get("feedback", "").strip() if args.get("feedback") else None
+
+    if not library_id:
+        return {"error": "library_id is required"}
+    if not draft_id:
+        return {"error": "draft_id is required"}
+
+    try:
+        db, role = get_library_db(args)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    user_id = g.mcp_user.get("user_id") if hasattr(g, "mcp_user") else None
+    if not user_id:
+        return {"error": "Authentication required"}
+
+    if role != "owner":
+        return {"error": "Only the library owner can reject drafts"}
+
+    draft = db.execute(
+        "SELECT id, author_login, status, draft_type, title, target_entry_id FROM drafts WHERE id = ?",
+        (draft_id,),
+    ).fetchone()
+
+    if not draft:
+        return {"error": f"Draft not found: {draft_id}"}
+
+    if draft["status"] not in ("draft", "submitted"):
+        return {
+            "error": (
+                f"Draft cannot be rejected: current status is '{draft['status']}'. "
+                "Only 'draft' or 'submitted' drafts can be rejected."
+            )
+        }
+
+    now = datetime.utcnow().isoformat() + "Z"
+
+    try:
+        db.execute(
+            """
+            UPDATE drafts
+            SET status = 'rejected', feedback = ?, resolved_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (feedback, now, now, draft_id),
+        )
+        commit_and_checkpoint(db)
+    except Exception as e:
+        logger.error(f"Failed to reject draft {draft_id}: {e}")
+        return {"error": f"Failed to reject draft: {str(e)}"}
+
+    logger.info(f"Draft {draft_id} rejected in library {library_id}")
+
+    result = {
+        "success": True,
+        "draft_id": draft_id,
+        "status": "rejected",
+        "rejected_at": now,
+        "author": draft["author_login"],
+    }
+    if feedback:
+        result["feedback"] = feedback
+        result["message"] = (
+            f"Draft rejected with feedback. The author ({draft['author_login']}) "
+            "can view feedback via review_draft and create a revised draft."
+        )
+    else:
+        result["message"] = (
+            f"Draft rejected. No feedback provided. "
+            f"The author ({draft['author_login']}) can create a new revised draft."
+        )
+
+    return result
+
+
 # ============ Prompt Handlers ============
 
 PROMPTS = [
