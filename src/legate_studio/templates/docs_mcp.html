@@ -429,6 +429,7 @@
         <nav class="docs-sidebar" aria-label="Documentation navigation">
             <div class="docs-sidebar-title">On this page</div>
             <ul class="docs-nav">
+                <li><a href="#agent-setup"><strong>Agent Setup</strong></a></li>
                 <li><a href="#overview">Overview</a></li>
                 <li><a href="#prerequisites">Prerequisites</a></li>
                 <li><a href="#quickstart">Quick Start</a></li>
@@ -460,6 +461,103 @@
 
         <!-- ── Main Content ── -->
         <div class="docs-content">
+
+            <!-- Agent Setup (autonomous instructions) -->
+            <span class="docs-anchor" id="agent-setup"></span>
+            <h2>Agent Setup</h2>
+            <p>
+                For AI agents and automated systems — this is everything you need to connect. No API key. No registration flow. Just point and authenticate.
+            </p>
+
+            <div class="callout callout-info">
+                <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p><strong>Machine-readable instructions</strong> are available at <a href="/docs/mcp/agent-setup" style="color:#58a6ff">/docs/mcp/agent-setup</a> (markdown) and <a href="/docs/mcp/agent-setup.json" style="color:#58a6ff">/docs/mcp/agent-setup.json</a> (JSON). Agents can <code>curl</code> either endpoint to self-configure.</p>
+            </div>
+
+            <div class="info-grid" style="margin: 1rem 0;">
+                <div class="info-card">
+                    <div class="info-card-title">MCP Endpoint</div>
+                    <p class="info-card-desc" style="font-family:monospace;color:#79c0ff">https://legate.studio/mcp</p>
+                </div>
+                <div class="info-card">
+                    <div class="info-card-title">Transport</div>
+                    <p class="info-card-desc" style="font-family:monospace;color:#79c0ff">streamable-http</p>
+                </div>
+                <div class="info-card">
+                    <div class="info-card-title">Auth</div>
+                    <p class="info-card-desc" style="font-family:monospace;color:#79c0ff">OAuth 2.1 + PKCE (GitHub SSO)</p>
+                </div>
+            </div>
+
+            <h3>Configuration</h3>
+            <p>Add this to your <code>.mcp.json</code> (Claude Code) or <code>claude_desktop_config.json</code> (Claude Desktop):</p>
+
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>{
+  "mcpServers": {
+    "legate": {
+      "type": "streamable-http",
+      "url": "https://legate.studio/mcp"
+    }
+  }
+}</pre>
+            </div>
+
+            <p>That's it. No API key. No token. No environment variables.</p>
+
+            <h3>What Happens Next</h3>
+            <ol class="step-list">
+                <li class="step-item">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <strong>Your MCP client discovers the OAuth server</strong>
+                        <p>It reads <code>https://legate.studio/.well-known/oauth-authorization-server</code> automatically.</p>
+                    </div>
+                </li>
+                <li class="step-item">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <strong>A browser opens for GitHub authorization</strong>
+                        <p>Log in with the GitHub account linked to your Legate Studio account.</p>
+                    </div>
+                </li>
+                <li class="step-item">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <strong>You're connected — verify with <code>check_connection</code></strong>
+                        <p>The token is managed automatically. No manual credential handling required.</p>
+                    </div>
+                </li>
+            </ol>
+
+            <h3>Verification</h3>
+            <div class="code-block">
+                <pre>Tool: check_connection
+
+Expected response:
+{
+  "status": "ok",
+  "user": "&lt;your-github-login&gt;",
+  "library": "&lt;your-github-login&gt;",
+  "message": "Connected to Legate Studio"
+}</pre>
+            </div>
+
+            <h3>Common First Steps</h3>
+            <ul>
+                <li><code>check_connection</code> — verify your identity and library access</li>
+                <li><code>list_categories</code> — see your library structure</li>
+                <li><code>search_library</code> — find notes by keyword</li>
+                <li><code>create_note</code> — add a new note to your library</li>
+                <li><code>get_library_stats</code> — see your library summary</li>
+            </ul>
+
+            <hr class="docs-divider">
 
             <!-- Overview -->
             <span class="docs-anchor" id="overview"></span>
