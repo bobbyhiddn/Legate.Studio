@@ -644,6 +644,253 @@ def create_app():
     def terms():
         return render_template("terms.html")
 
+    # ============ MCP Documentation ============
+
+    @app.route("/docs/mcp")
+    def docs_mcp():
+        return render_template("docs_mcp.html")
+
+    @app.route("/docs/mcp/agent-setup")
+    def docs_mcp_agent_setup():
+        instructions = """\
+# Legate Studio — MCP Agent Setup Instructions
+
+## Overview
+
+Legate Studio is a personal knowledge management platform with an MCP-first architecture.
+Your notes, categories, assets, and tasks are stored in a private per-user database and
+exposed through a standard MCP server.
+
+- **MCP Endpoint**: https://legate.studio/mcp
+- **Transport**: streamable-http
+- **Auth**: OAuth 2.1 with PKCE (GitHub SSO) — NO API KEY REQUIRED
+
+---
+
+## Prerequisites
+
+1. A Legate Studio account (sign up at https://legate.studio with your GitHub account)
+2. An MCP client that supports streamable-http transport and OAuth 2.1
+
+---
+
+## Configuration
+
+### Claude Code (.mcp.json)
+
+Add the following to your `.mcp.json` file in the project root, or to
+`~/.claude/mcp.json` for global access:
+
+```json
+{
+  "mcpServers": {
+    "legate": {
+      "type": "streamable-http",
+      "url": "https://legate.studio/mcp"
+    }
+  }
+}
+```
+
+That's it. No API key. No token. No registration flow.
+
+### Claude Desktop (claude_desktop_config.json)
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
+or `%APPDATA%\\Claude\\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "legate": {
+      "type": "streamable-http",
+      "url": "https://legate.studio/mcp"
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving.
+
+---
+
+## Authentication Flow (Automatic)
+
+When your MCP client first connects, it will:
+
+1. Discover the OAuth server at:
+   https://legate.studio/.well-known/oauth-authorization-server
+
+2. Open a browser window for GitHub authorization.
+   Log in with the GitHub account linked to your Legate Studio account.
+
+3. Return an access token to the client automatically.
+   Subsequent requests are authenticated without user interaction.
+
+You will NOT be asked for an API key, a registration token, or any manual
+credential configuration. The OAuth flow handles everything.
+
+---
+
+## Verification
+
+After connecting, call the `check_connection` tool to verify:
+
+```
+Tool: check_connection
+Expected response:
+{
+  "status": "ok",
+  "user": "<your-github-login>",
+  "library": "<your-github-login>",
+  "message": "Connected to Legate Studio"
+}
+```
+
+---
+
+## Common First Steps
+
+1. **Explore your library**
+   Call `list_categories` to see your knowledge base structure.
+
+2. **Search your notes**
+   Call `search_library` with a query string for semantic search.
+
+3. **Create a note**
+   Call `create_note` with title, content, and category.
+
+4. **Check recent activity**
+   Call `list_recent_notes` to see what was last updated.
+
+---
+
+## Available Tools (47 total)
+
+### Library Management (9 tools)
+- search_library        — Semantic search across all notes
+- create_note           — Create a new note (syncs to GitHub)
+- get_note              — Retrieve a note by title or ID
+- get_notes             — List notes in a category or subfolder
+- list_categories       — List all categories with note counts
+- list_recent_notes     — Most recently created/updated notes
+- append_to_note        — Append content to an existing note
+- get_related_notes     — Find semantically similar notes
+- get_library_stats     — Aggregate stats (notes, categories, assets)
+
+### Note Editing (5 tools)
+- update_note           — Replace note content
+- rename_note           — Rename a note (updates GitHub path)
+- delete_note           — Permanently delete a note
+- move_category         — Move a note to a different category
+- link_notes            — Create bidirectional links between notes
+
+### Organization (6 tools)
+- create_category       — Create a new top-level category
+- create_subfolder      — Create a subfolder within a category
+- list_subfolders       — List subfolders in a category
+- list_subfolder_contents — List notes in a subfolder
+- move_to_subfolder     — Move a note into a subfolder
+- rename_subfolder      — Rename a subfolder
+
+### Tasks (2 tools)
+- list_tasks            — List tasks, filterable by status
+- update_task_status    — Update task completion status
+
+### Shared Libraries — managed tier (6 tools)
+- create_shared_library — Create a shared library with GitHub repo
+- list_libraries        — List personal + all shared libraries
+- invite_collaborator   — Invite a GitHub user to collaborate
+- accept_invitation     — Accept a library invitation
+- remove_collaborator   — Remove a collaborator (owner only)
+- sync_shared_library   — Sync library from GitHub (owner only)
+
+### Collaboration — Draft & Merge (6 tools)
+- create_draft          — Create a draft note/edit for shared library
+- submit_draft          — Submit a draft for owner review
+- list_drafts           — List drafts by status/author
+- review_draft          — View draft with diff vs original
+- merge_draft           — Merge a draft into the library (owner only)
+- reject_draft          — Reject a draft with feedback (owner only)
+
+### Advanced (13 tools)
+- spawn_agent           — Spawn a background agent task
+- process_motif         — Transcribe and structure a voice note
+- get_processing_status — Check async job status
+- upload_asset          — Upload a binary asset
+- list_assets           — List all assets with metadata
+- get_asset             — Retrieve an asset by ID
+- delete_asset          — Delete an asset
+- get_asset_reference   — Get Markdown embed reference for an asset
+- upload_markdown_as_note — Create a note from a Markdown file
+- check_connection      — Verify connection and identity
+- verify_sync_state     — Check DB vs GitHub sync status
+- repair_sync_state     — Re-sync library from GitHub
+- get_note_context      — Full note context (content + links + related)
+
+---
+
+## Troubleshooting
+
+- **"User not found"**: The GitHub account used for OAuth doesn't have a Legate Studio
+  account. Sign up at https://legate.studio first.
+
+- **Tools not appearing**: Ensure `type` is `"streamable-http"` (not `"http"` or `"sse"`).
+  Restart the client after editing config.
+
+- **Sync errors**: Call `verify_sync_state`, then `repair_sync_state` to re-sync from GitHub.
+
+---
+
+## Machine-Readable Setup
+
+JSON format: https://legate.studio/docs/mcp/agent-setup.json
+Full documentation: https://legate.studio/docs/mcp
+"""
+        return instructions, 200, {"Content-Type": "text/markdown; charset=utf-8"}
+
+    @app.route("/docs/mcp/agent-setup.json")
+    def docs_mcp_agent_setup_json():
+        config_example = {
+            "mcpServers": {
+                "legate": {
+                    "type": "streamable-http",
+                    "url": "https://legate.studio/mcp",
+                }
+            }
+        }
+        instructions_summary = (
+            "1. Add config_example to .mcp.json or ~/.claude/mcp.json. "
+            "2. Start your MCP client — it will open a browser for GitHub OAuth. "
+            "3. Log in with your Legate Studio GitHub account. "
+            "4. Call check_connection to verify. "
+            "No API key required. OAuth 2.1 handles authentication automatically."
+        )
+        return jsonify(
+            {
+                "service": "Legate Studio",
+                "mcp_endpoint": "https://legate.studio/mcp",
+                "protocol": "streamable-http",
+                "auth_method": "oauth2.1",
+                "well_known_url": "https://legate.studio/.well-known/oauth-authorization-server",
+                "config_example": config_example,
+                "verification_tool": "check_connection",
+                "instructions": instructions_summary,
+                "docs_url": "https://legate.studio/docs/mcp",
+                "agent_setup_text": "https://legate.studio/docs/mcp/agent-setup",
+                "tool_count": 47,
+                "categories": [
+                    "Library Management",
+                    "Note Editing",
+                    "Organization",
+                    "Tasks",
+                    "Shared Libraries (managed tier)",
+                    "Collaboration (Draft & Merge)",
+                    "Advanced",
+                ],
+            }
+        )
+
     # ============ Solution / category landing pages ============
 
     @app.route("/mcp-first-pkm")
@@ -689,6 +936,7 @@ def create_app():
             "Allow: /contact\n"
             "Allow: /privacy\n"
             "Allow: /terms\n"
+            "Allow: /docs/mcp\n"
             "Allow: /mcp-first-pkm\n"
             "Allow: /personal-knowledge-base-for-ai\n"
             "Allow: /memory-layer-for-ai\n"
@@ -729,6 +977,7 @@ def create_app():
             ("https://legate.studio/contact",   today, "monthly", "0.4"),
             ("https://legate.studio/privacy",   today, "yearly",  "0.3"),
             ("https://legate.studio/terms",     today, "yearly",  "0.3"),
+            ("https://legate.studio/docs/mcp",  today, "monthly", "0.9"),
             # Solution / category landing pages
             ("https://legate.studio/mcp-first-pkm",                      today, "monthly", "0.8"),
             ("https://legate.studio/personal-knowledge-base-for-ai",     today, "monthly", "0.8"),

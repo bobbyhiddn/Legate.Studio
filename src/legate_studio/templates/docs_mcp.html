@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Connect Legate Studio to Claude Code, Claude Desktop, and other MCP clients. No API key required — OAuth 2.1 with GitHub SSO. 47 tools for knowledge management.">
+    <meta name="theme-color" content="#0d1117">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="MCP Setup | Connect AI Tools to Your Knowledge Base | Legate Studio">
+    <meta property="og:description" content="Connect Legate Studio to Claude Code, Claude Desktop, and other MCP clients. No API key — just point your MCP client at the endpoint and authenticate with GitHub.">
+    <meta property="og:image" content="https://legate.studio/static/img/og-share.png">
+    <meta property="og:url" content="https://legate.studio/docs/mcp">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Legate Studio">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="MCP Setup | Connect AI Tools to Your Knowledge Base | Legate Studio">
+    <meta name="twitter:description" content="Connect Legate Studio to Claude Code, Claude Desktop, and other MCP clients. OAuth 2.1 with GitHub SSO — no API key required.">
+    <meta name="twitter:image" content="https://legate.studio/static/img/og-share.png">
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://legate.studio/docs/mcp">
+
+    <title>MCP Setup | Connect AI Tools to Your Knowledge Base | Legate Studio</title>
+
+    {% from "marketing_base.html" import marketing_page_styles, marketing_head_common %}
+    {{ marketing_page_styles() }}
+    {{ marketing_head_common() }}
+
+    <!-- BreadcrumbList JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://legate.studio/"},
+        {"@type": "ListItem", "position": 2, "name": "MCP Setup", "item": "https://legate.studio/docs/mcp"}
+      ]
+    }
+    </script>
+
+    <style>
+        /* ── Docs-specific styles ── */
+        .docs-layout {
+            display: grid;
+            grid-template-columns: 220px 1fr;
+            gap: 3rem;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 1.5rem 4rem;
+            align-items: start;
+        }
+
+        /* Sticky sidebar nav */
+        .docs-sidebar {
+            position: sticky;
+            top: 5rem;
+        }
+        .docs-sidebar-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+        .docs-nav {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+        }
+        .docs-nav a {
+            display: block;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.3rem 0.75rem;
+            border-radius: 6px;
+            border-left: 2px solid transparent;
+            transition: color 0.15s, background 0.15s, border-color 0.15s;
+        }
+        .docs-nav a:hover {
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+            border-left-color: var(--accent-blue);
+        }
+        .docs-nav-sub a {
+            padding-left: 1.4rem;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+        .docs-nav-sub a:hover {
+            color: var(--text-secondary);
+        }
+
+        /* Main content */
+        .docs-content h2 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 2.5rem 0 0.75rem;
+            padding-top: 0.5rem;
+        }
+        .docs-content h3 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 1.75rem 0 0.5rem;
+        }
+        .docs-content p {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 0.75rem;
+        }
+        .docs-content ul, .docs-content ol {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            padding-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .docs-content li {
+            margin-bottom: 0.3rem;
+        }
+
+        /* Code blocks */
+        .code-block {
+            background: #0d1117;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+            position: relative;
+        }
+        .code-block pre {
+            margin: 0;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 0.82rem;
+            color: #e6edf3;
+            line-height: 1.6;
+            white-space: pre;
+        }
+        .code-block-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 0.6rem;
+            right: 0.6rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 0.25rem 0.6rem;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: color 0.15s, background 0.15s;
+        }
+        .copy-btn:hover {
+            color: var(--text-primary);
+            background: var(--bg-card);
+        }
+
+        /* Callout boxes */
+        .callout {
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin: 1.25rem 0;
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+        }
+        .callout-icon {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            margin-top: 2px;
+        }
+        .callout-info {
+            background: rgba(88, 166, 255, 0.08);
+            border: 1px solid rgba(88, 166, 255, 0.25);
+        }
+        .callout-info .callout-icon { color: #58a6ff; }
+        .callout-success {
+            background: rgba(63, 185, 80, 0.08);
+            border: 1px solid rgba(63, 185, 80, 0.25);
+        }
+        .callout-success .callout-icon { color: #3fb950; }
+        .callout-warning {
+            background: rgba(210, 153, 34, 0.08);
+            border: 1px solid rgba(210, 153, 34, 0.25);
+        }
+        .callout-warning .callout-icon { color: #d29922; }
+        .callout p {
+            margin: 0;
+            font-size: 0.87rem;
+        }
+        .callout strong {
+            color: var(--text-primary);
+        }
+
+        /* Client tabs */
+        .client-tabs {
+            display: flex;
+            gap: 0.4rem;
+            margin: 1.25rem 0 0;
+            flex-wrap: wrap;
+        }
+        .client-tab {
+            padding: 0.45rem 1rem;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .client-tab.active, .client-tab:hover {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: #fff;
+        }
+        .client-panel {
+            display: none;
+            margin-top: 1rem;
+        }
+        .client-panel.active {
+            display: block;
+        }
+
+        /* Tool grid */
+        .tool-category {
+            margin-bottom: 2rem;
+        }
+        .tool-category-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 0.75rem;
+        }
+        .tool-category-badge {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+        }
+        .badge-blue   { background: rgba(88, 166, 255, 0.12); color: #58a6ff; }
+        .badge-green  { background: rgba(63, 185, 80, 0.12);  color: #3fb950; }
+        .badge-purple { background: rgba(188, 140, 255, 0.12); color: #bc8cff; }
+        .badge-amber  { background: rgba(210, 153, 34, 0.12); color: #d29922; }
+        .badge-teal   { background: rgba(56, 189, 248, 0.12); color: #38bdf8; }
+        .badge-pink   { background: rgba(249, 115, 122, 0.12); color: #f9737a; }
+        .badge-gray   { background: rgba(139, 148, 158, 0.12); color: #8b949e; }
+
+        .tool-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 0.6rem;
+        }
+        .tool-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            padding: 0.65rem 0.9rem;
+        }
+        .tool-name {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            color: #79c0ff;
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+        }
+        .tool-desc {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+        .tool-tier-badge {
+            display: inline-block;
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+            background: rgba(210, 153, 34, 0.12);
+            color: #d29922;
+            margin-left: 0.4rem;
+            vertical-align: middle;
+            letter-spacing: 0.04em;
+        }
+
+        /* Step list */
+        .step-list {
+            counter-reset: steps;
+            list-style: none;
+            padding: 0;
+        }
+        .step-item {
+            counter-increment: steps;
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+            align-items: flex-start;
+        }
+        .step-num {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            color: #fff;
+            font-size: 0.78rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 2px;
+        }
+        .step-content {
+            flex: 1;
+        }
+        .step-content strong {
+            display: block;
+            font-size: 0.92rem;
+            color: var(--text-primary);
+            margin-bottom: 0.3rem;
+        }
+        .step-content p {
+            margin: 0;
+        }
+
+        /* Anchor offset for sticky nav */
+        .docs-anchor {
+            display: block;
+            height: 0;
+            margin-top: -5rem;
+            padding-top: 5rem;
+            pointer-events: none;
+        }
+
+        /* Divider */
+        .docs-divider {
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 2rem 0;
+        }
+
+        /* Endpoint pill */
+        .endpoint-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.9rem;
+            color: #79c0ff;
+            margin: 0.5rem 0 1rem;
+        }
+        .endpoint-pill-method {
+            font-size: 0.7rem;
+            font-weight: 700;
+            background: rgba(63, 185, 80, 0.12);
+            color: #3fb950;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .docs-layout {
+                grid-template-columns: 1fr;
+            }
+            .docs-sidebar {
+                position: static;
+                display: none;
+            }
+            .tool-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+{% from "marketing_base.html" import marketing_nav, marketing_footer, marketing_scripts %}
+{{ marketing_nav(active_page="docs") }}
+
+<main class="landing-main">
+
+    <!-- ===== Page Hero ===== -->
+    <div class="page-hero">
+        <div class="page-hero-label">MCP Documentation</div>
+        <h1>Connect AI Tools to Your Knowledge Base</h1>
+        <p class="page-hero-sub">
+            Legate Studio exposes your personal knowledge library as an MCP server. Connect Claude Code, Claude Desktop, or any MCP-compatible client — no API key required. Authentication is handled automatically via OAuth 2.1 with your GitHub account.
+        </p>
+        <div style="display:flex; gap:1rem; justify-content:center; margin-top:1.5rem; flex-wrap:wrap;">
+            <div class="endpoint-pill">
+                <span class="endpoint-pill-method">MCP</span>
+                https://legate.studio/mcp
+            </div>
+        </div>
+    </div>
+
+    <hr class="section-divider">
+
+    <!-- ===== Docs Layout ===== -->
+    <div class="docs-layout">
+
+        <!-- ── Sidebar ── -->
+        <nav class="docs-sidebar" aria-label="Documentation navigation">
+            <div class="docs-sidebar-title">On this page</div>
+            <ul class="docs-nav">
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#prerequisites">Prerequisites</a></li>
+                <li><a href="#quickstart">Quick Start</a></li>
+                <li class="docs-nav-sub">
+                    <ul class="docs-nav">
+                        <li><a href="#claude-code">Claude Code</a></li>
+                        <li><a href="#claude-desktop">Claude Desktop</a></li>
+                        <li><a href="#claude-web">Claude.ai Web</a></li>
+                        <li><a href="#other-clients">Other Clients</a></li>
+                    </ul>
+                </li>
+                <li><a href="#oauth">OAuth 2.1 Flow</a></li>
+                <li><a href="#tools">Available Tools</a></li>
+                <li class="docs-nav-sub">
+                    <ul class="docs-nav">
+                        <li><a href="#tools-library">Library Management</a></li>
+                        <li><a href="#tools-editing">Note Editing</a></li>
+                        <li><a href="#tools-org">Organization</a></li>
+                        <li><a href="#tools-tasks">Tasks</a></li>
+                        <li><a href="#tools-shared">Shared Libraries</a></li>
+                        <li><a href="#tools-collab">Collaboration</a></li>
+                        <li><a href="#tools-advanced">Advanced</a></li>
+                    </ul>
+                </li>
+                <li><a href="#verify">Verification</a></li>
+                <li><a href="#troubleshoot">Troubleshooting</a></li>
+            </ul>
+        </nav>
+
+        <!-- ── Main Content ── -->
+        <div class="docs-content">
+
+            <!-- Overview -->
+            <span class="docs-anchor" id="overview"></span>
+            <h2>Overview</h2>
+            <p>
+                Legate Studio is a personal knowledge management platform built around an MCP-first architecture. Your notes, categories, assets, and task lists are stored in a private per-user database — and the entire library is accessible to AI tools through a standard MCP server at <code>https://legate.studio/mcp</code>.
+            </p>
+            <p>
+                Unlike services that require API tokens, Legate uses <strong>OAuth 2.1 with PKCE</strong>. When you connect an MCP client, it redirects you to a GitHub login once. After that, the token is managed automatically — no copying keys, no environment variables, no expiry headaches.
+            </p>
+
+            <div class="callout callout-success">
+                <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                <p><strong>No API key needed.</strong> Authentication is handled automatically through OAuth 2.1 with GitHub SSO. Just point your MCP client at the endpoint and log in when prompted.</p>
+            </div>
+
+            <hr class="docs-divider">
+
+            <!-- Prerequisites -->
+            <span class="docs-anchor" id="prerequisites"></span>
+            <h2>Prerequisites</h2>
+            <ul>
+                <li>A <strong>Legate Studio account</strong> — sign up free at <a href="https://legate.studio" style="color:var(--accent-blue)">legate.studio</a> using your GitHub account</li>
+                <li>A <strong>GitHub account</strong> (used for authentication — Legate uses GitHub OAuth)</li>
+                <li>An MCP-compatible client (Claude Code, Claude Desktop, Claude.ai, or other)</li>
+            </ul>
+
+            <div class="callout callout-info">
+                <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p>You must have a Legate Studio account before connecting an MCP client. The OAuth flow will authenticate you against your existing account. If you haven't signed up yet, <a href="https://legate.studio" style="color:#58a6ff">create a free account first</a>.</p>
+            </div>
+
+            <hr class="docs-divider">
+
+            <!-- Quick Start -->
+            <span class="docs-anchor" id="quickstart"></span>
+            <h2>Quick Start</h2>
+            <p>Select your MCP client to see setup instructions:</p>
+
+            <div class="client-tabs">
+                <button class="client-tab active" onclick="showClient('claude-code', this)">Claude Code</button>
+                <button class="client-tab" onclick="showClient('claude-desktop', this)">Claude Desktop</button>
+                <button class="client-tab" onclick="showClient('claude-web', this)">Claude.ai Web</button>
+                <button class="client-tab" onclick="showClient('other', this)">Other Clients</button>
+            </div>
+
+            <!-- Claude Code -->
+            <span class="docs-anchor" id="claude-code"></span>
+            <div class="client-panel active" id="panel-claude-code">
+                <h3>Claude Code Setup</h3>
+                <p>Add Legate Studio to your <code>.mcp.json</code> file in your project root (or in <code>~/.claude/mcp.json</code> for global access):</p>
+
+                <div class="code-block-label">~/.claude/mcp.json &nbsp;or&nbsp; .mcp.json</div>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre>{
+  "mcpServers": {
+    "legate": {
+      "type": "streamable-http",
+      "url": "https://legate.studio/mcp"
+    }
+  }
+}</pre>
+                </div>
+
+                <ol class="step-list">
+                    <li class="step-item">
+                        <div class="step-num">1</div>
+                        <div class="step-content">
+                            <strong>Add the config above to your .mcp.json</strong>
+                            <p>Place it in your project root (for project-scoped access) or <code>~/.claude/mcp.json</code> for all projects.</p>
+                        </div>
+                    </li>
+                    <li class="step-item">
+                        <div class="step-num">2</div>
+                        <div class="step-content">
+                            <strong>Start a Claude Code session</strong>
+                            <p>Claude Code will detect the MCP server and prompt you to authenticate.</p>
+                        </div>
+                    </li>
+                    <li class="step-item">
+                        <div class="step-num">3</div>
+                        <div class="step-content">
+                            <strong>Authorize with GitHub</strong>
+                            <p>A browser window opens to <code>legate.studio/auth</code>. Log in with GitHub — the same account you used to create your Legate Studio account.</p>
+                        </div>
+                    </li>
+                    <li class="step-item">
+                        <div class="step-num">4</div>
+                        <div class="step-content">
+                            <strong>Done — your library is connected</strong>
+                            <p>Ask Claude to <code>list_categories</code> or <code>search_library</code> to confirm the connection.</p>
+                        </div>
+                    </li>
+                </ol>
+            </div>
+
+            <!-- Claude Desktop -->
+            <span class="docs-anchor" id="claude-desktop"></span>
+            <div class="client-panel" id="panel-claude-desktop">
+                <h3>Claude Desktop Setup</h3>
+                <p>Edit your Claude Desktop config file:</p>
+
+                <div class="code-block-label">macOS: ~/Library/Application Support/Claude/claude_desktop_config.json</div>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre>{
+  "mcpServers": {
+    "legate": {
+      "type": "streamable-http",
+      "url": "https://legate.studio/mcp"
+    }
+  }
+}</pre>
+                </div>
+
+                <div class="code-block-label">Windows: %APPDATA%\Claude\claude_desktop_config.json</div>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre>{
+  "mcpServers": {
+    "legate": {
+      "type": "streamable-http",
+      "url": "https://legate.studio/mcp"
+    }
+  }
+}</pre>
+                </div>
+
+                <ol class="step-list">
+                    <li class="step-item">
+                        <div class="step-num">1</div>
+                        <div class="step-content">
+                            <strong>Edit the config file at the path above</strong>
+                            <p>If the file doesn't exist, create it. If it already has <code>mcpServers</code>, add the <code>legate</code> entry to the existing object.</p>
+                        </div>
+                    </li>
+                    <li class="step-item">
+                        <div class="step-num">2</div>
+                        <div class="step-content">
+                            <strong>Restart Claude Desktop</strong>
+                            <p>Fully quit and relaunch — Claude Desktop reads config on startup.</p>
+                        </div>
+                    </li>
+                    <li class="step-item">
+                        <div class="step-num">3</div>
+                        <div class="step-content">
+                            <strong>Authorize with GitHub when prompted</strong>
+                            <p>Claude Desktop will open a browser for GitHub OAuth. Log in with the account linked to your Legate Studio subscription.</p>
+                        </div>
+                    </li>
+                </ol>
+            </div>
+
+            <!-- Claude.ai Web -->
+            <span class="docs-anchor" id="claude-web"></span>
+            <div class="client-panel" id="panel-claude-web">
+                <h3>Claude.ai Web Setup</h3>
+                <p>Claude.ai supports MCP servers via Settings → Connectors (available on Pro and Team plans).</p>
+
+                <ol class="step-list">
+                    <li class="step-item">
+                        <div class="step-num">1</div>
+                        <div class="step-content">
+                            <strong>Open Settings → Connectors</strong>
+                            <p>Go to <a href="https://claude.ai" style="color:var(--accent-blue)">claude.ai</a>, click your avatar → Settings → Connectors.</p>
+                        </div>
+                    </li>
+                    <li class="step-item">
+                        <div class="step-num">2</div>
+                        <div class="step-content">
+                            <strong>Add a new connector</strong>
+                            <p>Click <strong>Add connector</strong> and select <em>Custom MCP server</em>.</p>
+                        </div>
+                    </li>
+                    <li class="step-item">
+                        <div class="step-num">3</div>
+                        <div class="step-content">
+                            <strong>Enter the endpoint URL</strong>
+                            <p>Set the URL to <code>https://legate.studio/mcp</code>. Leave authentication settings at defaults — Legate handles OAuth automatically.</p>
+                        </div>
+                    </li>
+                    <li class="step-item">
+                        <div class="step-num">4</div>
+                        <div class="step-content">
+                            <strong>Authorize with GitHub</strong>
+                            <p>Claude.ai will redirect you to GitHub for authorization. After approving, you'll be sent back and the connector will be active.</p>
+                        </div>
+                    </li>
+                </ol>
+            </div>
+
+            <!-- Other Clients -->
+            <span class="docs-anchor" id="other-clients"></span>
+            <div class="client-panel" id="panel-other">
+                <h3>Other MCP Clients</h3>
+                <p>Any MCP client that supports <strong>Streamable HTTP</strong> transport and <strong>OAuth 2.1</strong> can connect to Legate Studio.</p>
+
+                <div class="info-grid" style="margin: 1rem 0;">
+                    <div class="info-card">
+                        <div class="info-card-title">Transport Protocol</div>
+                        <p class="info-card-desc" style="font-family:monospace;color:#79c0ff">streamable-http</p>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-card-title">MCP Endpoint</div>
+                        <p class="info-card-desc" style="font-family:monospace;color:#79c0ff">https://legate.studio/mcp</p>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-card-title">Auth Method</div>
+                        <p class="info-card-desc" style="font-family:monospace;color:#79c0ff">OAuth 2.1 + PKCE</p>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-card-title">OAuth Discovery</div>
+                        <p class="info-card-desc" style="font-family:monospace;font-size:0.75rem;color:#79c0ff">https://legate.studio/.well-known/oauth-authorization-server</p>
+                    </div>
+                </div>
+
+                <p>Your MCP client needs to support the OAuth 2.1 authorization code flow with PKCE. The discovery endpoint above returns all OAuth metadata your client needs to initiate the flow automatically.</p>
+
+                <p>For agent-based automation, see the machine-readable setup instructions at <a href="/docs/mcp/agent-setup" style="color:var(--accent-blue)">/docs/mcp/agent-setup</a>.</p>
+            </div>
+
+            <hr class="docs-divider">
+
+            <!-- OAuth -->
+            <span class="docs-anchor" id="oauth"></span>
+            <h2>OAuth 2.1 Flow</h2>
+            <p>Legate Studio uses OAuth 2.1 with PKCE for MCP authentication. Here's what happens when you connect:</p>
+
+            <ol class="step-list">
+                <li class="step-item">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <strong>Your MCP client discovers the auth server</strong>
+                        <p>It fetches <code>https://legate.studio/.well-known/oauth-authorization-server</code> to get the authorization and token endpoint URLs.</p>
+                    </div>
+                </li>
+                <li class="step-item">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <strong>Client generates a PKCE code challenge and redirects you to GitHub</strong>
+                        <p>Your browser opens the Legate authorization page, which immediately redirects to GitHub's OAuth flow.</p>
+                    </div>
+                </li>
+                <li class="step-item">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <strong>You log in with GitHub</strong>
+                        <p>Authorize Legate Studio to access your GitHub profile (used only to identify your account).</p>
+                    </div>
+                </li>
+                <li class="step-item">
+                    <div class="step-num">4</div>
+                    <div class="step-content">
+                        <strong>Legate issues a token and redirects back to your client</strong>
+                        <p>The MCP client exchanges the authorization code for an access token. This token is stored by the client and refreshed automatically.</p>
+                    </div>
+                </li>
+                <li class="step-item">
+                    <div class="step-num">5</div>
+                    <div class="step-content">
+                        <strong>All subsequent requests are authenticated</strong>
+                        <p>Your client sends the token with every MCP request. You won't be asked to log in again unless the token expires or is revoked.</p>
+                    </div>
+                </li>
+            </ol>
+
+            <div class="callout callout-info">
+                <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p>Legate does <strong>not</strong> store your GitHub credentials. We receive your GitHub username and user ID from GitHub's OAuth response — that's all. Your actual GitHub tokens never touch Legate's servers.</p>
+            </div>
+
+            <hr class="docs-divider">
+
+            <!-- Tools -->
+            <span class="docs-anchor" id="tools"></span>
+            <h2>Available Tools</h2>
+            <p>Legate Studio exposes 47 MCP tools grouped into 7 categories. All tools are available on any tier. Shared library tools require a managed-tier subscription.</p>
+
+            <!-- Library Management -->
+            <span class="docs-anchor" id="tools-library"></span>
+            <div class="tool-category">
+                <div class="tool-category-header">
+                    <span class="tool-category-badge badge-blue">Library Management</span>
+                    <span style="font-size:0.8rem;color:var(--text-muted)">9 tools</span>
+                </div>
+                <div class="tool-list">
+                    <div class="tool-item">
+                        <div class="tool-name">search_library</div>
+                        <div class="tool-desc">Semantic search across all notes using embeddings. Returns ranked results with excerpts.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">create_note</div>
+                        <div class="tool-desc">Create a new note with title, content, category, and optional subfolder. Syncs to GitHub.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">get_note</div>
+                        <div class="tool-desc">Retrieve a single note by title or ID, including full content and metadata.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">get_notes</div>
+                        <div class="tool-desc">List notes in a category or subfolder, with pagination support.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">list_categories</div>
+                        <div class="tool-desc">List all top-level categories in your library with note counts.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">list_recent_notes</div>
+                        <div class="tool-desc">Retrieve the most recently created or updated notes across all categories.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">append_to_note</div>
+                        <div class="tool-desc">Add content to the end of an existing note without replacing it.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">get_related_notes</div>
+                        <div class="tool-desc">Find notes semantically similar to a given note using vector similarity.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">get_library_stats</div>
+                        <div class="tool-desc">Return aggregate stats: total notes, categories, assets, last sync time.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Note Editing -->
+            <span class="docs-anchor" id="tools-editing"></span>
+            <div class="tool-category">
+                <div class="tool-category-header">
+                    <span class="tool-category-badge badge-green">Note Editing</span>
+                    <span style="font-size:0.8rem;color:var(--text-muted)">5 tools</span>
+                </div>
+                <div class="tool-list">
+                    <div class="tool-item">
+                        <div class="tool-name">update_note</div>
+                        <div class="tool-desc">Replace the content of an existing note and commit the change to GitHub.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">rename_note</div>
+                        <div class="tool-desc">Rename a note's title and update the corresponding GitHub file path.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">delete_note</div>
+                        <div class="tool-desc">Permanently delete a note from the library and remove it from GitHub.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">move_category</div>
+                        <div class="tool-desc">Move a note to a different category, updating its GitHub path.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">link_notes</div>
+                        <div class="tool-desc">Create a bidirectional link between two notes in the knowledge graph.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Organization -->
+            <span class="docs-anchor" id="tools-org"></span>
+            <div class="tool-category">
+                <div class="tool-category-header">
+                    <span class="tool-category-badge badge-purple">Organization</span>
+                    <span style="font-size:0.8rem;color:var(--text-muted)">6 tools</span>
+                </div>
+                <div class="tool-list">
+                    <div class="tool-item">
+                        <div class="tool-name">create_category</div>
+                        <div class="tool-desc">Create a new top-level category in your library.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">create_subfolder</div>
+                        <div class="tool-desc">Create a subfolder within a category for finer-grained organization.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">list_subfolders</div>
+                        <div class="tool-desc">List all subfolders within a given category.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">list_subfolder_contents</div>
+                        <div class="tool-desc">List notes inside a specific subfolder.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">move_to_subfolder</div>
+                        <div class="tool-desc">Move a note into a subfolder within its current category.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">rename_subfolder</div>
+                        <div class="tool-desc">Rename a subfolder and update all contained note paths on GitHub.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tasks -->
+            <span class="docs-anchor" id="tools-tasks"></span>
+            <div class="tool-category">
+                <div class="tool-category-header">
+                    <span class="tool-category-badge badge-amber">Tasks</span>
+                    <span style="font-size:0.8rem;color:var(--text-muted)">2 tools</span>
+                </div>
+                <div class="tool-list">
+                    <div class="tool-item">
+                        <div class="tool-name">list_tasks</div>
+                        <div class="tool-desc">List tasks embedded in notes, filterable by status (open, in-progress, done).</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">update_task_status</div>
+                        <div class="tool-desc">Update the completion status of a task within a note.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shared Libraries -->
+            <span class="docs-anchor" id="tools-shared"></span>
+            <div class="tool-category">
+                <div class="tool-category-header">
+                    <span class="tool-category-badge badge-teal">Shared Libraries</span>
+                    <span style="font-size:0.8rem;color:var(--text-muted)">6 tools &nbsp;·&nbsp;
+                        <span style="color:#d29922">managed tier</span>
+                    </span>
+                </div>
+                <div class="tool-list">
+                    <div class="tool-item">
+                        <div class="tool-name">create_shared_library <span class="tool-tier-badge">managed</span></div>
+                        <div class="tool-desc">Create a new shared library with its own GitHub repo, accessible to invited collaborators.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">list_libraries <span class="tool-tier-badge">managed</span></div>
+                        <div class="tool-desc">List all libraries (personal + shared) you have access to, with roles and member counts.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">invite_collaborator <span class="tool-tier-badge">managed</span></div>
+                        <div class="tool-desc">Invite a GitHub user to collaborate on a shared library.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">accept_invitation <span class="tool-tier-badge">managed</span></div>
+                        <div class="tool-desc">Accept a pending invitation to join a shared library.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">remove_collaborator <span class="tool-tier-badge">managed</span></div>
+                        <div class="tool-desc">Remove a collaborator from a shared library (owner only).</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">sync_shared_library <span class="tool-tier-badge">managed</span></div>
+                        <div class="tool-desc">Sync a shared library from its GitHub repository (owner only).</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Collaboration -->
+            <span class="docs-anchor" id="tools-collab"></span>
+            <div class="tool-category">
+                <div class="tool-category-header">
+                    <span class="tool-category-badge badge-pink">Collaboration (Draft &amp; Merge)</span>
+                    <span style="font-size:0.8rem;color:var(--text-muted)">6 tools</span>
+                </div>
+                <div class="tool-list">
+                    <div class="tool-item">
+                        <div class="tool-name">create_draft</div>
+                        <div class="tool-desc">Create a draft note or edit proposal for a shared library (collaborators only).</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">submit_draft</div>
+                        <div class="tool-desc">Submit a draft for owner review.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">list_drafts</div>
+                        <div class="tool-desc">List drafts in a shared library, filterable by status and author.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">review_draft</div>
+                        <div class="tool-desc">View a draft's content alongside the original note (for edits) with diff summary.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">merge_draft</div>
+                        <div class="tool-desc">Merge a submitted draft into the shared library (owner only). Handles new notes, edits, and deletions.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">reject_draft</div>
+                        <div class="tool-desc">Reject a draft with optional feedback (owner only).</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced -->
+            <span class="docs-anchor" id="tools-advanced"></span>
+            <div class="tool-category">
+                <div class="tool-category-header">
+                    <span class="tool-category-badge badge-gray">Advanced</span>
+                    <span style="font-size:0.8rem;color:var(--text-muted)">13 tools</span>
+                </div>
+                <div class="tool-list">
+                    <div class="tool-item">
+                        <div class="tool-name">spawn_agent</div>
+                        <div class="tool-desc">Spawn a background agent task to process or enrich a note asynchronously.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">process_motif</div>
+                        <div class="tool-desc">Process a voice note or audio motif: transcribe, categorize, and create a structured note.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">get_processing_status</div>
+                        <div class="tool-desc">Check the status of an async processing job (motif or agent task).</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">upload_asset</div>
+                        <div class="tool-desc">Upload a binary asset (image, PDF, file) to your library's asset store.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">list_assets</div>
+                        <div class="tool-desc">List all assets in your library with metadata and download URLs.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">get_asset</div>
+                        <div class="tool-desc">Retrieve metadata and content for a specific asset.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">delete_asset</div>
+                        <div class="tool-desc">Permanently delete an asset from your library.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">get_asset_reference</div>
+                        <div class="tool-desc">Get a Markdown reference string to embed an asset in a note.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">upload_markdown_as_note</div>
+                        <div class="tool-desc">Upload a Markdown file and create a note from its contents.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">check_connection</div>
+                        <div class="tool-desc">Verify MCP connection health and confirm your authenticated identity.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">verify_sync_state</div>
+                        <div class="tool-desc">Check whether the library database is in sync with the GitHub repository.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">repair_sync_state</div>
+                        <div class="tool-desc">Re-sync the library database from GitHub when it's drifted out of sync.</div>
+                    </div>
+                    <div class="tool-item">
+                        <div class="tool-name">get_note_context</div>
+                        <div class="tool-desc">Retrieve a note's full context: content, links, related notes, and metadata in one call.</div>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="docs-divider">
+
+            <!-- Verification -->
+            <span class="docs-anchor" id="verify"></span>
+            <h2>Verification</h2>
+            <p>After connecting, verify the integration is working:</p>
+
+            <h3>1. Check the connection</h3>
+            <p>Ask your AI assistant to call <code>check_connection</code>. You should see a response like:</p>
+            <div class="code-block">
+                <pre>{
+  "status": "ok",
+  "user": "your-github-login",
+  "library": "your-github-login",
+  "message": "Connected to Legate Studio"
+}</pre>
+            </div>
+
+            <h3>2. List your categories</h3>
+            <p>Ask your assistant to call <code>list_categories</code>. This will return the top-level organization of your knowledge base. If you've just signed up, you'll see the default categories.</p>
+
+            <h3>3. Create a test note</h3>
+            <p>Try creating a note to confirm write access is working:</p>
+            <div class="code-block">
+                <pre>Create a note titled "MCP Test" in the General category with content "MCP connection verified."</pre>
+            </div>
+            <p>Then verify it appeared in your Legate Studio library at <a href="https://legate.studio" style="color:var(--accent-blue)">legate.studio</a>.</p>
+
+            <hr class="docs-divider">
+
+            <!-- Troubleshooting -->
+            <span class="docs-anchor" id="troubleshoot"></span>
+            <h2>Troubleshooting</h2>
+
+            <h3>Authentication loop / can't complete OAuth</h3>
+            <p>Make sure you're logged into GitHub in your browser before starting the OAuth flow. If the browser doesn't open automatically, look for a URL in your MCP client's output and open it manually.</p>
+
+            <h3>Tools not appearing in Claude</h3>
+            <p>Check that:</p>
+            <ul>
+                <li>The <code>type</code> field is exactly <code>"streamable-http"</code> (not <code>"http"</code> or <code>"sse"</code>)</li>
+                <li>The URL is exactly <code>https://legate.studio/mcp</code> (no trailing slash)</li>
+                <li>Your MCP client was fully restarted after editing the config</li>
+            </ul>
+
+            <h3>Authentication error: "User not found"</h3>
+            <p>This means the GitHub account you authenticated with doesn't have a Legate Studio account. Make sure you sign up at <a href="https://legate.studio" style="color:var(--accent-blue)">legate.studio</a> with the same GitHub account before connecting via MCP.</p>
+
+            <h3>Sync errors / library out of date</h3>
+            <p>Call <code>verify_sync_state</code> to check the sync status, then <code>repair_sync_state</code> to pull the latest state from GitHub. This is usually caused by a note being edited directly in GitHub between syncs.</p>
+
+            <h3>Still having issues?</h3>
+            <p>Contact support via the <a href="/contact" style="color:var(--accent-blue)">contact page</a> or check the <a href="/security" style="color:var(--accent-blue)">security docs</a> for information about authentication architecture.</p>
+
+            <hr class="docs-divider">
+
+            <div class="callout callout-info">
+                <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p><strong>For autonomous agents:</strong> See the machine-readable setup instructions at <a href="/docs/mcp/agent-setup" style="color:#58a6ff">/docs/mcp/agent-setup</a> (plain text) and <a href="/docs/mcp/agent-setup.json" style="color:#58a6ff">/docs/mcp/agent-setup.json</a> (JSON).</p>
+            </div>
+
+        </div><!-- /.docs-content -->
+    </div><!-- /.docs-layout -->
+
+</main>
+
+{% from "marketing_base.html" import marketing_footer, marketing_scripts %}
+{{ marketing_footer() }}
+{{ marketing_scripts() }}
+
+<script>
+function showClient(id, btn) {
+    // Deactivate all panels and tabs
+    document.querySelectorAll('.client-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.client-tab').forEach(t => t.classList.remove('active'));
+    // Activate selected
+    var panel = document.getElementById('panel-' + id);
+    if (panel) panel.classList.add('active');
+    if (btn) btn.classList.add('active');
+}
+
+function copyCode(btn) {
+    var block = btn.closest('.code-block');
+    var pre = block.querySelector('pre');
+    navigator.clipboard.writeText(pre.textContent).then(function() {
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+    });
+}
+</script>
+
+</body>
+</html>
